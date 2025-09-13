@@ -18,6 +18,50 @@ const CONFIG = {
     SCROLL_DELAY: 2000 // 2 seconds between scroll requests
 };
 
+// Optional Reddit OAuth (prevents 403 blocks on server platforms)
+const REDDIT = {
+    clientId: process.env.REDDIT_CLIENT_ID || '',
+    clientSecret: process.env.REDDIT_CLIENT_SECRET || '',
+    username: process.env.REDDIT_USERNAME || '',
+    password: process.env.REDDIT_PASSWORD || '',
+    userAgent: process.env.REDDIT_USER_AGENT || 'Stremula1/2.0 (by u/stremula1-bot)'
+};
+
+let redditAuth = { token: null, expiresAt: 0 };
+
+async function getRedditOAuthToken() {
+    try {
+        if (!REDDIT.clientId || !REDDIT.clientSecret || !REDDIT.username || !REDDIT.password)
+            return null;
+        if (redditAuth.token && Date.now() < (redditAuth.expiresAt - 60 * 1000))
+            return redditAuth.token;
+        const authHeader = Buffer.from(`${REDDIT.clientId}:${REDDIT.clientSecret}`).toString('base64');
+        const body = new URLSearchParams();
+        body.append('grant_type', 'password');
+        body.append('username', REDDIT.username);
+        body.append('password', REDDIT.password);
+        const response = await axios.post('https://www.reddit.com/api/v1/access_token', body.toString(), {
+            headers: {
+                'Authorization': `Basic ${authHeader}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': REDDIT.userAgent
+            },
+            timeout: 15000
+        });
+        const accessToken = response.data?.access_token;
+        const expiresIn = response.data?.expires_in || 3600;
+        if (accessToken) {
+            redditAuth.token = accessToken;
+            redditAuth.expiresAt = Date.now() + (expiresIn * 1000);
+            return accessToken;
+        }
+        return null;
+    } catch (e) {
+        console.error('Reddit OAuth failed:', e.response?.data || e.message);
+        return null;
+    }
+}
+
 // Deployment configuration
 const DEFAULT_PORT = process.env.PORT || 7003;
 let PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${DEFAULT_PORT}`;
@@ -830,22 +874,33 @@ async function fetchEgortechPosts() {
                 url += `&after=${after}`;
             }
             
-            const response = await axios.get(url, {
+            let axiosConfig = {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': REDDIT.userAgent
                 },
                 timeout: 15000
-            });
+            };
+            const oauthToken = await getRedditOAuthToken();
+            if (oauthToken) {
+                url = `https://oauth.reddit.com/user/egortech/submitted.json?limit=100${after ? `&after=${after}` : ''}`;
+                axiosConfig.headers = {
+                    ...axiosConfig.headers,
+                    'Authorization': `bearer ${oauthToken}`
+                };
+            }
+            const response = await axios.get(url, axiosConfig);
             
             if (!response.data?.data?.children) {
                 console.log('📭 No more posts found');
                 break;
             }
             
-            const pagePosts = response.data.data.children
+            const payload = oauthToken ? response.data?.data : response.data?.data;
+            const children = payload?.children || [];
+            const pagePosts = children
                 .filter(post => {
                     const title = post.data?.title;
-                    const created = post.data?.created_utc * 1000; // Convert to milliseconds
+                    const created = post.data?.created_utc * 1000; // Convert to ms
                     
                     // Only include posts that start with 'Formula 1' and are within our time range
                     return title && title.startsWith('Formula 1') && created >= threeMonthsAgo;
@@ -899,7 +954,9 @@ async function fetchPostContent(postUrl) {
             timeout: 10000
         });
         
-        const postData = response.data[0].data.children[0].data;
+        const postData = Array.isArray(response.data)
+            ? response.data[0].data.children[0].data
+            : response.data?.data?.children?.[0]?.data;
         return postData.selftext_html || '';
     } catch (error) {
         console.error('Error fetching post content:', error);
