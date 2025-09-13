@@ -15,7 +15,9 @@ const CONFIG = {
     POSTS_CACHE_FILE: path.join(__dirname, 'cache', 'posts-cache.json'),
     FULLY_PROCESSED_POSTS_FILE: path.join(__dirname, 'cache', 'fully-processed-posts.json'),
     MAX_SCROLL_MONTHS: 5, // Scroll back 5 months
-    SCROLL_DELAY: 2000 // 2 seconds between scroll requests
+    SCROLL_DELAY: 2000, // 2 seconds between scroll requests
+    REDDIT_RATE_LIMIT_DELAY: 3000, // 3 seconds between Reddit requests
+    MAX_REDDIT_RETRIES: 3 // Maximum retries for Reddit requests
 };
 
 // Optional Reddit OAuth (prevents 403 blocks on server platforms)
@@ -865,6 +867,14 @@ async function fetchEgortechPosts() {
         const maxPages = 50; // Limit to prevent infinite loops
         const threeMonthsAgo = Date.now() - (CONFIG.MAX_SCROLL_MONTHS * 30 * 24 * 60 * 60 * 1000);
         
+        // Array of different user agents to rotate through
+        const userAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            REDDIT.userAgent
+        ];
         
         while (pageCount < maxPages) {
             pageCount++;
@@ -874,12 +884,21 @@ async function fetchEgortechPosts() {
                 url += `&after=${after}`;
             }
             
+            // Rotate user agent
+            const currentUserAgent = userAgents[pageCount % userAgents.length];
+            
             let axiosConfig = {
                 headers: {
-                    'User-Agent': REDDIT.userAgent
+                    'User-Agent': currentUserAgent,
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 },
-                timeout: 15000
+                timeout: 20000
             };
+            
             const oauthToken = await getRedditOAuthToken();
             if (oauthToken) {
                 url = `https://oauth.reddit.com/user/egortech/submitted.json?limit=100${after ? `&after=${after}` : ''}`;
@@ -888,7 +907,45 @@ async function fetchEgortechPosts() {
                     'Authorization': `bearer ${oauthToken}`
                 };
             }
-            const response = await axios.get(url, axiosConfig);
+            
+            // Retry logic with exponential backoff
+            let retryCount = 0;
+            const maxRetries = 3;
+            let response;
+            
+            while (retryCount <= maxRetries) {
+                try {
+                    // Add delay between requests
+                    if (pageCount > 1 || retryCount > 0) {
+                        const delay = Math.min(2000 + (retryCount * 1000), 5000);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                    
+                    response = await axios.get(url, axiosConfig);
+                    break; // Success, exit retry loop
+                } catch (error) {
+                    retryCount++;
+                    
+                    if (error.response?.status === 403) {
+                        console.log(`🚫 Reddit blocked request (403) - attempt ${retryCount}/${maxRetries + 1}`);
+                        if (retryCount > maxRetries) {
+                            console.log('⚠️  Max retries reached for Reddit requests, using cached data if available');
+                            return allPosts.length > 0 ? allPosts : cachedPosts || [];
+                        }
+                        // Wait longer before retrying on 403
+                        await new Promise(resolve => setTimeout(resolve, 5000 * retryCount));
+                    } else if (error.response?.status === 429) {
+                        console.log(`⏳ Rate limited (429) - waiting ${retryCount * 10} seconds`);
+                        await new Promise(resolve => setTimeout(resolve, retryCount * 10000));
+                    } else {
+                        console.error(`❌ Request failed (${error.response?.status || 'network'}) - attempt ${retryCount}/${maxRetries + 1}`);
+                        if (retryCount > maxRetries) {
+                            throw error;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+                    }
+                }
+            }
             
             if (!response.data?.data?.children) {
                 console.log('📭 No more posts found');
@@ -945,19 +1002,65 @@ async function fetchEgortechPosts() {
 
 async function fetchPostContent(postUrl) {
     try {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Increased rate limiting
         
-        const response = await axios.get(`${postUrl}.json`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 10000
-        });
+        // Array of different user agents to rotate through
+        const userAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
+        ];
         
-        const postData = Array.isArray(response.data)
-            ? response.data[0].data.children[0].data
-            : response.data?.data?.children?.[0]?.data;
-        return postData.selftext_html || '';
+        const currentUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+        
+        // Retry logic with exponential backoff
+        let retryCount = 0;
+        const maxRetries = 2;
+        
+        while (retryCount <= maxRetries) {
+            try {
+                const response = await axios.get(`${postUrl}.json`, {
+                    headers: {
+                        'User-Agent': currentUserAgent,
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    },
+                    timeout: 15000
+                });
+                
+                const postData = Array.isArray(response.data)
+                    ? response.data[0].data.children[0].data
+                    : response.data?.data?.children?.[0]?.data;
+                return postData.selftext_html || '';
+            } catch (error) {
+                retryCount++;
+                
+                if (error.response?.status === 403) {
+                    console.log(`🚫 Post content blocked (403) - attempt ${retryCount}/${maxRetries + 1}`);
+                    if (retryCount > maxRetries) {
+                        console.log(`⚠️  Skipping post content for ${postUrl} due to blocking`);
+                        return '';
+                    }
+                    // Wait longer before retrying on 403
+                    await new Promise(resolve => setTimeout(resolve, 3000 * retryCount));
+                } else if (error.response?.status === 429) {
+                    console.log(`⏳ Post content rate limited (429) - waiting ${retryCount * 5} seconds`);
+                    await new Promise(resolve => setTimeout(resolve, retryCount * 5000));
+                } else {
+                    if (retryCount > maxRetries) {
+                        console.error(`❌ Failed to fetch post content after ${maxRetries + 1} attempts:`, error.message);
+                        return '';
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                }
+            }
+        }
+        
+        return '';
     } catch (error) {
         console.error('Error fetching post content:', error);
         return '';
@@ -1087,6 +1190,19 @@ async function processEgortechData() {
         
         console.log(`🔄 Processing ${posts.length} egortech Formula 1 posts`);
         
+        // If no posts were fetched (likely due to Reddit blocking), try to use existing cache
+        if (posts.length === 0) {
+            console.log('⚠️  No posts fetched, checking for existing cache...');
+            const existingCache = cache.grandPrix;
+            if (existingCache && existingCache.size > 0) {
+                console.log(`✅ Using existing cache with ${existingCache.size} Grand Prix entries`);
+                return existingCache;
+            } else {
+                console.log('❌ No posts and no existing cache available');
+                return new Map();
+            }
+        }
+        
         // Count how many posts are already fully processed
         let skippedCount = 0;
         let newPostsCount = 0;
@@ -1150,6 +1266,7 @@ async function processEgortechData() {
                 const magnetLink = extractMagnetLink(postContent);
                 
                 if (!magnetLink) {
+                    console.log(`    ⚠️  No magnet link found in post ${post.id}`);
                     continue;
                 }
                 
@@ -1956,8 +2073,8 @@ async function startServer() {
     console.log('✅ All magnet links have been pre-converted to streaming links!');
     console.log('✅ Addon is fully ready with optimized caching system!');
     
-    // Schedule periodic updates (every 30 minutes)
-    cron.schedule('*/30 * * * *', () => {
+    // Schedule periodic updates (every 60 minutes to reduce Reddit API pressure)
+    cron.schedule('0 */1 * * *', () => {
         console.log('🔄 Starting scheduled cache update...');
         updateCache().catch(error => {
             console.error('Scheduled cache update failed:', error);
