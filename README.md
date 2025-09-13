@@ -20,7 +20,7 @@ A Stremio addon for Formula 1 race replays that works exclusively with Real Debr
 
 1. Start the addon servers:
    ```bash
-   cd sky-f1-addon
+   cd stremula-1
    npm install
    npm start
    ```
@@ -125,7 +125,7 @@ Direct Download Links
 ### File Structure
 
 ```
-sky-f1-addon/
+stremula-1/
 ├── addon.js              # Main addon logic
 ├── server.js             # Configuration server
 ├── config.html           # Real Debrid configuration page
