@@ -656,6 +656,15 @@ function extractMagnetLink(html) {
     return null;
 }
 
+// Helper function to test date parsing
+function testDateParsing() {
+    const testDate = "04.09.2025";
+    const [day, month, year] = testDate.split('.');
+    const parsedDate = new Date(year, month - 1, day);
+    console.log(`📅 Test date parsing: "${testDate}" -> ${parsedDate.toISOString()}`);
+    return parsedDate;
+}
+
 function extractSessionsFromContent(html) {
     const $ = cheerio.load(html);
     const sessions = [];
@@ -1370,10 +1379,24 @@ async function processEgortechData() {
                     .flat()
                     .find(session => session.name === sessionName);
                 
+                // Convert the date from DD.MM.YYYY format to a proper Date object
+                let sessionDate = Date.now(); // Default fallback
+                if (sessionDetails && sessionDetails.date) {
+                    try {
+                        // Parse date in DD.MM.YYYY format
+                        const [day, month, year] = sessionDetails.date.split('.');
+                        if (day && month && year) {
+                            sessionDate = new Date(year, month - 1, day).getTime();
+                        }
+                    } catch (error) {
+                        console.log(`    ⚠️  Failed to parse date "${sessionDetails.date}" for session "${sessionName}"`);
+                    }
+                }
+                
                 sessions.set(sessionName, {
                     title: getDisplayNameForSession(sessionName),
                     streams: [],
-                    updated: Date.now(),
+                    updated: sessionDate,
                     details: sessionDetails || null
                 });
                 
@@ -1891,12 +1914,13 @@ function setupCommandInterface() {
                 }
                 
                 // Create a mock session list (since we're manually adding)
+                // Note: These dates should be updated to match the actual race weekend dates
                 const mockSessions = [
-                    { name: 'Free Practice One', fullMatch: 'Free Practice One (30.05.2025) (1:36:04)', date: '30.05.2025', duration: '1:36:04' },
-                    { name: 'Free Practice Two', fullMatch: 'Free Practice Two (30.05.2025) (1:26:04)', date: '30.05.2025', duration: '1:26:04' },
-                    { name: 'Free Practice Three', fullMatch: 'Free Practice Three (31.05.2025) (1:40:29)', date: '31.05.2025', duration: '1:40:29' },
-                    { name: 'Qualifying', fullMatch: 'Qualifying (31.05.2025) (2:25:37)', date: '31.05.2025', duration: '2:25:37' },
-                    { name: 'Race', fullMatch: 'Race (01.06.2025) (4:09:23)', date: '01.06.2025', duration: '4:09:23' }
+                    { name: 'Free Practice One', fullMatch: 'Free Practice One (04.09.2025) (0:41:23)', date: '04.09.2025', duration: '0:41:23' },
+                    { name: 'Free Practice Two', fullMatch: 'Free Practice Two (05.09.2025) (1:21:03)', date: '05.09.2025', duration: '1:21:03' },
+                    { name: 'Free Practice Three', fullMatch: 'Free Practice Three (06.09.2025) (1:40:31)', date: '06.09.2025', duration: '1:40:31' },
+                    { name: 'Qualifying', fullMatch: 'Qualifying (06.09.2025) (2:22:03)', date: '06.09.2025', duration: '2:22:03' },
+                    { name: 'Race', fullMatch: 'Race (07.09.2025) (4:03:03)', date: '07.09.2025', duration: '4:03:03' }
                 ];
                 
                 addToFullyProcessedPosts(postId, grandPrixName, mockSessions, fullyProcessedPosts);
@@ -2215,6 +2239,9 @@ async function startServer() {
     console.log(`📊 Grand Prix available: ${cache.grandPrix.size}`);
     console.log('✅ All magnet links have been pre-converted to streaming links!');
     console.log('✅ Addon is fully ready with optimized caching system!');
+    
+    // Test date parsing functionality
+    testDateParsing();
     
     // Schedule periodic updates (every 30 minutes)
     cron.schedule('*/30 * * * *', () => {
