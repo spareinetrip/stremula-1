@@ -1,82 +1,169 @@
-# Stremula 1 (Real-Debrid)
+# Stremula 1 - Formula 1 Addon for Stremio
 
-High-quality Formula 1 replays for Stremio, powered by Real-Debrid. Single-server Express app: serves the addon and the configuration UI on one port, ready for local use or Render deployment.
+High-quality Sky Sports F1 replays with Real Debrid integration, now using Reddit API for reliable post fetching.
 
-## Features
+## 🚀 Features
 
-- **Real-Debrid only**: Converts magnets to direct streaming links via Real-Debrid API
-- **Complete weekends**: Practice, Qualifying, Sprint, Race (smart session matching)
-- **Persistent caching**: Saves processed results to speed up subsequent runs
-- **Single server**: One process serves `/manifest.json` and `/config.html`
+- **Real Debrid Integration**: Direct streaming links with instant playback
+- **Reddit API Access**: Reliable, authenticated access to Formula 1 posts
+- **Smart Caching**: Persistent cache system for faster loading
+- **Session Detection**: Automatically detects Practice, Qualifying, Sprint, and Race sessions
+- **Quality Selection**: 4K and 1080p options when available
 
-## Requirements
+## 📋 Requirements
 
-- Real-Debrid subscription
-- Real-Debrid API key: get from `https://real-debrid.com/apitoken`
+### 1. Real Debrid Account (REQUIRED)
+- Sign up at [real-debrid.com](https://real-debrid.com)
+- Get your API token from [API Token page](https://real-debrid.com/apitoken)
 
-## Quick start (local)
+### 2. Reddit API Credentials (REQUIRED)
+The addon now uses Reddit's official API to avoid 403 blocking issues.
+
+#### How to Get Reddit API Credentials:
+
+1. **Create a Reddit App:**
+   - Go to [Reddit App Preferences](https://www.reddit.com/prefs/apps)
+   - Click "Create App" or "Create Another App"
+   - Choose **"script"** as the app type
+   - Enter any name (e.g., "Stremula1")
+   - Leave redirect URI empty
+   - Click "Create app"
+
+2. **Get Your Credentials:**
+   - **Client ID**: The string under your app name (looks like: `abcd1234efgh5678`)
+   - **Client Secret**: The "secret" field (longer string)
+   - **Username**: Your Reddit username (without u/ prefix)
+   - **Password**: Your Reddit password
+
+## ⚙️ Configuration
+
+### Option 1: Web Configuration (Recommended)
+1. Start the addon: `node addon.js`
+2. Open [http://localhost:7003/config.html](http://localhost:7003/config.html)
+3. Enter your Real Debrid API key
+4. Enter your Reddit API credentials
+5. Test both configurations
+6. Save the settings
+
+### Option 2: Environment Variables
+Set these environment variables:
 
 ```bash
-cd stremula-1
-npm install
-# Recommended: set API key via env var
-REALDEBRID_API_KEY=your_token_here npm start
+# Real Debrid (Required)
+export REALDEBRID_API_KEY="your_real_debrid_api_key"
+
+# Reddit API (Required)
+export REDDIT_CLIENT_ID="your_reddit_client_id"
+export REDDIT_CLIENT_SECRET="your_reddit_client_secret"
+export REDDIT_USERNAME="your_reddit_username"
+export REDDIT_PASSWORD="your_reddit_password"
+
+# Optional
+export REDDIT_USER_AGENT="Stremula1/2.0 (by u/yourusername)"
 ```
 
-- Config page: `http://localhost:7003/config.html`
-- Manifest: `http://localhost:7003/manifest.json`
+## 🏃‍♂️ Quick Start
 
-If you didn’t set `REALDEBRID_API_KEY`, you can enter and save it on the config page.
+1. **Install Dependencies:**
+   ```bash
+   npm install
+   ```
 
-## Deploy to Render (free tier)
+2. **Configure Credentials:**
+   - Use the web interface at `/config.html` OR
+   - Set environment variables
 
-1) Push this folder to a GitHub repo
+3. **Start the Addon:**
+   ```bash
+   node addon.js
+   ```
 
-2) Create a Render Web Service
-- Root Directory: `stremula-1`
-- Build Command: `npm install`
-- Start Command: `npm start`
-- Environment variables:
-  - `NODE_ENV=production`
-  - `REALDEBRID_API_KEY=<your-token>` (recommended)
+4. **Install in Stremio:**
+   - Open Stremio
+   - Go to Addons → Community Addons
+   - Click the "+" button
+   - Enter: `http://localhost:7003/manifest.json`
 
-3) Use the provided URL
-- Manifest: `https://<your-service>.onrender.com/manifest.json`
-- Config: `https://<your-service>.onrender.com/config.html`
+## 🔧 Technical Details
 
-## Configuration options
+### Reddit API Integration
+- Uses OAuth2 authentication for reliable access
+- Fetches posts from u/egortech (Formula 1 content provider)
+- Scans back 5 months for comprehensive content coverage
+- Rate-limited to respect Reddit's API limits
 
-- `REALDEBRID_API_KEY` (env): preferred for cloud deploys; avoids relying on disk writes
-- Config file (local): saved as `realdebrid-config.json` when using the config page
+### Real Debrid Processing
+- Converts magnet links to direct streaming URLs
+- Supports multiple video qualities (4K, 1080p)
+- Instant playback without download waiting
 
-## Endpoints
+### Caching System
+- **Posts Cache**: Stores Reddit posts for 24 hours
+- **Addon Cache**: Stores processed Grand Prix data
+- **Fully Processed Posts**: Tracks completed posts to avoid re-processing
 
-- `GET /manifest.json` — Stremio addon manifest
-- `GET /api/config` — Read config (masks env-provided token)
-- `POST /api/config` — Save config to file (local/dev)
-- `POST /api/test-key` — Validate a Real-Debrid token
-- `GET /api/addon-status` — Basic addon status
-- Static assets: `/config.html`, `/media/*`, `/images/*`
+## 📊 Addon Status
 
-## File structure
+Check addon status at: `http://localhost:7003/api/addon-status`
 
-```
-stremula-1/
-├── addon.js                # Single Express server + Stremio addon router
-├── config.html             # Real-Debrid configuration UI
-├── realdebrid-config.json  # Saved config (local/dev)
-├── media/                  # Posters & thumbnails
-├── images/                 # Backgrounds
-├── cache/                  # Addon caches
-├── package.json
-└── README.md
-```
+Response includes:
+- Cache status and Grand Prix count
+- Real Debrid configuration status
+- Reddit API configuration status
+- Processing progress
 
-## Notes
+## 🐛 Troubleshooting
 
-- Initial processing runs in the background to avoid cold-start timeouts on Render.
-- CLI utilities are disabled in cloud by default; set `ENABLE_CLI=1` to enable locally.
+### "Reddit API credentials NOT configured"
+- Ensure you've created a Reddit app with "script" type
+- Double-check all four credentials are correct
+- Test credentials using the web interface
 
-## License
+### "Real Debrid not configured"
+- Get your API token from [real-debrid.com/apitoken](https://real-debrid.com/apitoken)
+- Test the API key using the web interface
 
-This project is for educational purposes. Respect content creators and service terms.
+### "No posts found" or "Cache updated with 0 Grand Prix"
+- Check Reddit API credentials are working
+- Verify u/egortech is still posting Formula 1 content
+- Check server logs for authentication errors
+
+### 403 Errors (Should be fixed now!)
+- The addon now uses Reddit API instead of web scraping
+- Ensure Reddit API credentials are properly configured
+- Check that your Reddit app is set to "script" type
+
+## 🔄 Updates
+
+The addon automatically:
+- Updates every 30 minutes via cron job
+- Processes new posts in the background
+- Maintains persistent cache between restarts
+- Handles Reddit API token refresh automatically
+
+## 📝 Logs
+
+Monitor addon logs for:
+- Reddit API authentication status
+- Real Debrid conversion progress
+- Cache update activities
+- Error messages and debugging info
+
+## 🚨 Important Notes
+
+1. **Reddit API is REQUIRED**: Without proper Reddit API credentials, the addon cannot fetch posts
+2. **Real Debrid is REQUIRED**: Without Real Debrid, no streaming links will be available
+3. **Rate Limiting**: The addon respects Reddit's API rate limits (60 requests/minute)
+4. **Token Refresh**: OAuth tokens are automatically refreshed when needed
+
+## 📞 Support
+
+If you encounter issues:
+1. Check the addon status endpoint
+2. Review server logs for error messages
+3. Verify all credentials are correct
+4. Ensure Reddit app is configured as "script" type
+
+---
+
+**Note**: This addon is for personal use only. Respect Reddit's Terms of Service and Real Debrid's usage policies.

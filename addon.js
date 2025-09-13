@@ -15,125 +15,115 @@ const CONFIG = {
     POSTS_CACHE_FILE: path.join(__dirname, 'cache', 'posts-cache.json'),
     FULLY_PROCESSED_POSTS_FILE: path.join(__dirname, 'cache', 'fully-processed-posts.json'),
     MAX_SCROLL_MONTHS: 5, // Scroll back 5 months
-    SCROLL_DELAY: 2000, // 2 seconds between scroll requests
-    REDDIT_RATE_LIMIT_DELAY: 3000, // 3 seconds between Reddit requests
-    MAX_REDDIT_RETRIES: 3 // Maximum retries for Reddit requests
+    SCROLL_DELAY: 2000 // 2 seconds between scroll requests
 };
 
-// Optional Reddit OAuth (prevents 403 blocks on server platforms)
-const REDDIT = {
+// Reddit API Configuration - REQUIRED for proper access
+let REDDIT = {
     clientId: process.env.REDDIT_CLIENT_ID || '',
     clientSecret: process.env.REDDIT_CLIENT_SECRET || '',
     username: process.env.REDDIT_USERNAME || '',
     password: process.env.REDDIT_PASSWORD || '',
-    userAgent: process.env.REDDIT_USER_AGENT || 'Stremula1/2.0 (by u/stremula1-bot)'
+    userAgent: process.env.REDDIT_USER_AGENT || 'Stremula1/2.0 (by u/stremula1-bot)',
+    // Reddit API endpoints
+    apiBase: 'https://oauth.reddit.com',
+    authUrl: 'https://www.reddit.com/api/v1/access_token'
 };
+
+// Load Reddit configuration from file if environment variables not set
+function loadRedditConfig() {
+    try {
+        // If environment variables are set, use them (priority)
+        if (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET && 
+            process.env.REDDIT_USERNAME && process.env.REDDIT_PASSWORD) {
+            console.log('✅ Using Reddit credentials from environment variables');
+            return true;
+        }
+        
+        // Otherwise, try to load from file
+        const configPath = path.join(__dirname, 'reddit-config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (config.clientId && config.clientSecret && config.username && config.password) {
+                REDDIT = {
+                    ...REDDIT,
+                    clientId: config.clientId,
+                    clientSecret: config.clientSecret,
+                    username: config.username,
+                    password: config.password
+                };
+                console.log('✅ Loaded Reddit credentials from file');
+                return true;
+            }
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('❌ Error loading Reddit configuration:', error);
+        return false;
+    }
+}
 
 let redditAuth = { token: null, expiresAt: 0 };
 
-// Request statistics tracking
-let requestStats = {
-    totalRequests: 0,
-    successfulRequests: 0,
-    failedRequests: 0,
-    blockedRequests: 0,
-    rateLimitedRequests: 0,
-    lastRequestTime: null,
-    averageResponseTime: 0
-};
-
-// Log request statistics
-function logRequestStats() {
-    console.log('📊 Request Statistics:');
-    console.log(`   Total Requests: ${requestStats.totalRequests}`);
-    console.log(`   Successful: ${requestStats.successfulRequests}`);
-    console.log(`   Failed: ${requestStats.failedRequests}`);
-    console.log(`   Blocked (403): ${requestStats.blockedRequests}`);
-    console.log(`   Rate Limited (429): ${requestStats.rateLimitedRequests}`);
-    console.log(`   Success Rate: ${requestStats.totalRequests > 0 ? Math.round((requestStats.successfulRequests / requestStats.totalRequests) * 100) : 0}%`);
-    console.log(`   Average Response Time: ${Math.round(requestStats.averageResponseTime)}ms`);
-    if (requestStats.lastRequestTime) {
-        console.log(`   Last Request: ${new Date(requestStats.lastRequestTime).toISOString()}`);
-    }
-}
-
-// Test Reddit connectivity with different strategies
-async function testRedditConnectivity() {
-    console.log('🧪 Testing Reddit connectivity...');
-    
-    const testUrls = [
-        'https://www.reddit.com/.json',
-        'https://www.reddit.com/r/MotorsportsReplays/.json',
-        'https://www.reddit.com/user/egortech/.json',
-        'https://httpbin.org/ip' // Test if we can reach external sites
-    ];
-    
-    const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ];
-    
-    for (const url of testUrls) {
-        for (const userAgent of userAgents) {
-            try {
-                console.log(`🔍 Testing: ${url} with ${userAgent.substring(0, 50)}...`);
-                const response = await axios.get(url, {
-                    headers: {
-                        'User-Agent': userAgent,
-                        'Accept': 'application/json, text/plain, */*',
-                        'Accept-Language': 'en-US,en;q=0.9'
-                    },
-                    timeout: 10000
-                });
-                console.log(`✅ Success: ${url} - Status: ${response.status}`);
-                return { success: true, workingUrl: url, workingUserAgent: userAgent };
-            } catch (error) {
-                console.log(`❌ Failed: ${url} - Status: ${error.response?.status || 'network'} - ${error.message}`);
-            }
-        }
-    }
-    
-    console.log('⚠️  All connectivity tests failed');
-    return { success: false };
-}
-
+// Enhanced Reddit OAuth authentication with better error handling
 async function getRedditOAuthToken() {
     try {
+        // Check if we have required credentials
         if (!REDDIT.clientId || !REDDIT.clientSecret || !REDDIT.username || !REDDIT.password) {
             console.log('⚠️  Reddit OAuth credentials not configured');
+            console.log('📋 Required environment variables:');
+            console.log('   - REDDIT_CLIENT_ID');
+            console.log('   - REDDIT_CLIENT_SECRET');
+            console.log('   - REDDIT_USERNAME');
+            console.log('   - REDDIT_PASSWORD');
             return null;
         }
-        if (redditAuth.token && Date.now() < (redditAuth.expiresAt - 60 * 1000)) {
-            console.log('✅ Using cached Reddit OAuth token');
+        
+        // Check if token is still valid (with 5 minute buffer)
+        if (redditAuth.token && Date.now() < (redditAuth.expiresAt - 5 * 60 * 1000)) {
             return redditAuth.token;
         }
         
-        console.log('🔑 Requesting new Reddit OAuth token...');
+        console.log('🔐 Authenticating with Reddit API...');
+        
+        // Create basic auth header
         const authHeader = Buffer.from(`${REDDIT.clientId}:${REDDIT.clientSecret}`).toString('base64');
+        
+        // Prepare OAuth request body
         const body = new URLSearchParams();
         body.append('grant_type', 'password');
         body.append('username', REDDIT.username);
         body.append('password', REDDIT.password);
         
-        const response = await axios.post('https://www.reddit.com/api/v1/access_token', body.toString(), {
+        // Make OAuth request
+        const response = await axios.post(REDDIT.authUrl, body.toString(), {
             headers: {
                 'Authorization': `Basic ${authHeader}`,
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'User-Agent': REDDIT.userAgent
             },
-            timeout: 15000
+            timeout: 30000 // 30 second timeout
         });
         
         const accessToken = response.data?.access_token;
         const expiresIn = response.data?.expires_in || 3600;
+        
         if (accessToken) {
             redditAuth.token = accessToken;
             redditAuth.expiresAt = Date.now() + (expiresIn * 1000);
-            console.log(`✅ Reddit OAuth token obtained, expires in ${expiresIn} seconds`);
+            console.log('✅ Reddit OAuth authentication successful');
+            return accessToken;
         }
-        return accessToken;
+        
+        console.error('❌ No access token received from Reddit');
+        return null;
+        
     } catch (error) {
-        console.error('❌ Error getting Reddit OAuth token:', error.response?.data || error.message);
+        console.error('❌ Reddit OAuth authentication failed:', error.response?.status, error.response?.statusText);
+        if (error.response?.data) {
+            console.error('Error details:', error.response.data);
+        }
         return null;
     }
 }
@@ -924,35 +914,28 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink) {
     }
 }
 
+// Enhanced Reddit API post fetching with proper OAuth
 async function fetchEgortechPosts() {
     try {
-        console.log('🔍 Fetching egortech posts...');
-        console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`🏠 Platform: ${process.platform}`);
-        console.log(`📍 User Agent: ${REDDIT.userAgent}`);
-        console.log(`🔑 OAuth Available: ${!!(REDDIT.clientId && REDDIT.clientSecret)}`);
-        
-        // Test connectivity first
-        const connectivityTest = await testRedditConnectivity();
-        if (!connectivityTest.success) {
-            console.log('⚠️  Reddit connectivity test failed, using cached data if available');
-            const cachedPosts = loadPostsCache();
-            if (cachedPosts && cachedPosts.length > 0) {
-                console.log(`📝 Using cached posts: ${cachedPosts.length} posts`);
-                return cachedPosts;
-            }
-            console.log('❌ No cached data available and connectivity failed');
-            return [];
-        }
-        
-        console.log(`✅ Reddit connectivity test passed using: ${connectivityTest.workingUrl}`);
+        console.log('🔍 Fetching egortech posts using Reddit API...');
         
         // Check cache first
         const cachedPosts = loadPostsCache();
         if (cachedPosts) {
             console.log(`📝 Using cached posts: ${cachedPosts.length} posts`);
-            console.log(`⏰ Cache age: ${Math.round((Date.now() - (cachedPosts[0]?.created_utc * 1000 || 0)) / (1000 * 60 * 60))} hours`);
             return cachedPosts;
+        }
+        
+        // Get OAuth token - REQUIRED for API access
+        const oauthToken = await getRedditOAuthToken();
+        if (!oauthToken) {
+            console.error('❌ Cannot fetch posts without Reddit OAuth token');
+            console.log('🔧 Please configure Reddit API credentials:');
+            console.log('   - REDDIT_CLIENT_ID');
+            console.log('   - REDDIT_CLIENT_SECRET');
+            console.log('   - REDDIT_USERNAME');
+            console.log('   - REDDIT_PASSWORD');
+            return [];
         }
         
         const allPosts = [];
@@ -961,314 +944,156 @@ async function fetchEgortechPosts() {
         const maxPages = 50; // Limit to prevent infinite loops
         const threeMonthsAgo = Date.now() - (CONFIG.MAX_SCROLL_MONTHS * 30 * 24 * 60 * 60 * 1000);
         
-        // Array of different user agents to rotate through
-        const userAgents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-            'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            REDDIT.userAgent
-        ];
+        console.log('📡 Using Reddit OAuth API for reliable access...');
         
-        // Different Reddit endpoints to try
-        const redditEndpoints = [
-            {
-                name: 'Standard User Profile',
-                url: `${CONFIG.EGORTECH_REDDIT_URL}.json`,
-                oauthUrl: 'https://oauth.reddit.com/user/egortech/submitted.json'
-            },
-            {
-                name: 'Alternative Profile Format',
-                url: `https://www.reddit.com/user/egortech/submitted/.json`,
-                oauthUrl: 'https://oauth.reddit.com/user/egortech/submitted.json'
-            },
-            {
-                name: 'Subreddit Search',
-                url: `https://www.reddit.com/r/MotorsportsReplays/search.json?q=author:egortech&sort=new&t=all`,
-                oauthUrl: 'https://oauth.reddit.com/r/MotorsportsReplays/search.json?q=author:egortech&sort=new&t=all'
-            }
-        ];
-        
-        let currentEndpoint = 0;
-        let endpointSuccess = false;
-        
-        while (pageCount < maxPages && !endpointSuccess) {
+        while (pageCount < maxPages) {
             pageCount++;
+            console.log(`📄 Fetching page ${pageCount}...`);
             
-            // Try different endpoints if current one fails
-            const endpoint = redditEndpoints[currentEndpoint % redditEndpoints.length];
-            console.log(`🎯 Trying endpoint ${currentEndpoint + 1}/${redditEndpoints.length}: ${endpoint.name}`);
-            
-            let url = `${endpoint.url}?limit=100`;
+            // Use OAuth Reddit API endpoint
+            let url = `${REDDIT.apiBase}/user/egortech/submitted?limit=100&raw_json=1`;
             if (after) {
                 url += `&after=${after}`;
             }
             
-            // Rotate user agent
-            const currentUserAgent = userAgents[pageCount % userAgents.length];
-            console.log(`🔄 Using User-Agent: ${currentUserAgent.substring(0, 50)}...`);
-            
-            let axiosConfig = {
+            const axiosConfig = {
                 headers: {
-                    'User-Agent': currentUserAgent,
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                    'Sec-Fetch-Dest': 'empty',
-                    'Sec-Fetch-Mode': 'cors',
-                    'Sec-Fetch-Site': 'same-origin',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1'
+                    'Authorization': `bearer ${oauthToken}`,
+                    'User-Agent': REDDIT.userAgent
                 },
-                timeout: 25000,
-                maxRedirects: 5,
-                validateStatus: function (status) {
-                    return status >= 200 && status < 400; // Accept redirects
-                }
+                timeout: 30000 // 30 second timeout
             };
             
-            const oauthToken = await getRedditOAuthToken();
-            if (oauthToken) {
-                url = `${endpoint.oauthUrl}?limit=100${after ? `&after=${after}` : ''}`;
-                axiosConfig.headers = {
-                    ...axiosConfig.headers,
-                    'Authorization': `bearer ${oauthToken}`
-                };
-                console.log(`🔑 Using OAuth token for request`);
-            } else {
-                console.log(`⚠️  No OAuth token available, using public API`);
-            }
-            
-            console.log(`📡 Request URL: ${url}`);
-            console.log(`⏰ Request attempt: ${pageCount}/${maxPages}`);
-            
-            // Retry logic with exponential backoff
-            let retryCount = 0;
-            const maxRetries = 3;
-            let response;
-            let requestSuccess = false;
-            
-            while (retryCount <= maxRetries && !requestSuccess) {
-                try {
-                    // Add delay between requests
-                    if (pageCount > 1 || retryCount > 0) {
-                        const delay = Math.min(2000 + (retryCount * 1000), 5000);
-                        console.log(`⏳ Waiting ${delay}ms before request...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    }
-                    
-                    const requestStartTime = Date.now();
-                    response = await axios.get(url, axiosConfig);
-                    const requestDuration = Date.now() - requestStartTime;
-                    
-                    // Update statistics
-                    requestStats.totalRequests++;
-                    requestStats.successfulRequests++;
-                    requestStats.lastRequestTime = Date.now();
-                    requestStats.averageResponseTime = (requestStats.averageResponseTime + requestDuration) / 2;
-                    
-                    console.log(`✅ Request successful! Status: ${response.status}, Duration: ${requestDuration}ms`);
-                    console.log(`📊 Response headers:`, Object.keys(response.headers));
-                    console.log(`📦 Response size: ${JSON.stringify(response.data).length} characters`);
-                    console.log(`🎯 Endpoint: ${endpoint.name}`);
-                    
-                    requestSuccess = true;
-                    endpointSuccess = true; // Mark endpoint as working
-                    
-                } catch (error) {
-                    retryCount++;
-                    requestStats.totalRequests++;
-                    requestStats.failedRequests++;
-                    requestStats.lastRequestTime = Date.now();
-                    
-                    const errorDetails = {
-                        status: error.response?.status,
-                        statusText: error.response?.statusText,
-                        headers: error.response?.headers,
-                        data: error.response?.data ? JSON.stringify(error.response.data).substring(0, 200) : 'No data',
-                        message: error.message,
-                        code: error.code
-                    };
-                    
-                    console.log(`❌ Request failed - attempt ${retryCount}/${maxRetries + 1}`);
-                    console.log(`🔍 Error details:`, errorDetails);
-                    
-                    if (error.response?.status === 403) {
-                        requestStats.blockedRequests++;
-                        console.log(`🚫 Reddit blocked request (403) - attempt ${retryCount}/${maxRetries + 1}`);
-                        console.log(`🚫 Total blocked requests: ${requestStats.blockedRequests}`);
-                        if (retryCount > maxRetries) {
-                            console.log(`⚠️  Max retries reached for endpoint "${endpoint.name}", trying next endpoint...`);
-                            currentEndpoint++;
-                            if (currentEndpoint >= redditEndpoints.length) {
-                                console.log('⚠️  All endpoints failed, using cached data if available');
-                                logRequestStats();
-                                return allPosts.length > 0 ? allPosts : cachedPosts || [];
-                            }
-                            break; // Try next endpoint
-                        }
-                        // Wait longer before retrying on 403
-                        const waitTime = 5000 * retryCount;
-                        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                    } else if (error.response?.status === 429) {
-                        requestStats.rateLimitedRequests++;
-                        console.log(`⏳ Rate limited (429) - waiting ${retryCount * 10} seconds`);
-                        console.log(`⏳ Total rate limited requests: ${requestStats.rateLimitedRequests}`);
-                        await new Promise(resolve => setTimeout(resolve, retryCount * 10000));
-                    } else if (error.response?.status === 404) {
-                        console.log(`🔍 Endpoint not found (404) - trying next endpoint...`);
-                        currentEndpoint++;
-                        break; // Try next endpoint immediately
-                    } else {
-                        console.error(`❌ Request failed (${error.response?.status || 'network'}) - attempt ${retryCount}/${maxRetries + 1}`);
-                        if (retryCount > maxRetries) {
-                            console.log(`⚠️  Max retries reached for endpoint "${endpoint.name}", trying next endpoint...`);
-                            currentEndpoint++;
-                            if (currentEndpoint >= redditEndpoints.length) {
-                                console.log('⚠️  All endpoints failed, using cached data if available');
-                                return allPosts.length > 0 ? allPosts : cachedPosts || [];
-                            }
-                            break; // Try next endpoint
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+            try {
+                const response = await axios.get(url, axiosConfig);
+                
+                if (!response.data?.data?.children) {
+                    console.log('📭 No more posts found');
+                    break;
+                }
+                
+                const children = response.data.data.children || [];
+                const pagePosts = children
+                    .filter(post => {
+                        const title = post.data?.title;
+                        const created = post.data?.created_utc * 1000; // Convert to ms
+                        
+                        // Only include posts that start with 'Formula 1' and are within our time range
+                        return title && title.startsWith('Formula 1') && created >= threeMonthsAgo;
+                    })
+                    .map(post => ({
+                        title: post.data.title,
+                        url: `https://reddit.com${post.data.permalink}`,
+                        created: post.data.created_utc,
+                        id: post.data.id,
+                        author: post.data.author,
+                        selftext: post.data.selftext || '', // Include post content directly
+                        selftext_html: post.data.selftext_html || ''
+                    }));
+                
+                allPosts.push(...pagePosts);
+                console.log(`📝 Found ${pagePosts.length} Formula 1 posts on page ${pageCount}`);
+                
+                // Check if we've gone back far enough
+                if (pagePosts.length > 0) {
+                    const oldestPost = Math.min(...pagePosts.map(p => p.created * 1000));
+                    if (oldestPost < threeMonthsAgo) {
+                        console.log('⏰ Reached time limit, stopping fetch');
+                        break;
                     }
                 }
-            }
-            
-            if (!requestSuccess) {
-                console.log(`⚠️  Request failed for endpoint "${endpoint.name}", trying next endpoint...`);
-                currentEndpoint++;
-                if (currentEndpoint >= redditEndpoints.length) {
-                    console.log('⚠️  All endpoints exhausted, using cached data if available');
-                    return allPosts.length > 0 ? allPosts : cachedPosts || [];
+                
+                // Get next page token
+                after = response.data.data.after;
+                if (!after) {
+                    console.log('📄 No more pages available');
+                    break;
                 }
-                continue; // Try next endpoint
+                
+                // Rate limiting - Reddit API allows 60 requests per minute
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second between requests
+                
+            } catch (pageError) {
+                console.error(`❌ Error fetching page ${pageCount}:`, pageError.response?.status, pageError.response?.statusText);
+                if (pageError.response?.status === 401) {
+                    console.log('🔐 Token expired, refreshing...');
+                    redditAuth.token = null; // Force token refresh
+                    const newToken = await getRedditOAuthToken();
+                    if (!newToken) {
+                        console.error('❌ Failed to refresh token, stopping');
+                        break;
+                    }
+                    // Retry the same page with new token
+                    pageCount--;
+                    continue;
+                }
+                // For other errors, wait longer and continue
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
-            
-            if (!response.data?.data?.children) {
-                console.log('📭 No more posts found');
-                break;
-            }
-            
-            const payload = oauthToken ? response.data?.data : response.data?.data;
-            const children = payload?.children || [];
-            const pagePosts = children
-                .filter(post => {
-                    const title = post.data?.title;
-                    const created = post.data?.created_utc * 1000; // Convert to ms
-                    
-                    // Only include posts that start with 'Formula 1' and are within our time range
-                    return title && title.startsWith('Formula 1') && created >= threeMonthsAgo;
-                })
-                .map(post => ({
-                    title: post.data.title,
-                    url: `https://reddit.com${post.data.permalink}`,
-                    created: post.data.created_utc,
-                    id: post.data.id,
-                    author: post.data.author
-                }));
-            
-            allPosts.push(...pagePosts);
-            
-            // Check if we've gone back far enough
-            const oldestPost = Math.min(...pagePosts.map(p => p.created * 1000));
-            if (oldestPost < threeMonthsAgo) {
-                break;
-            }
-            
-            // Get next page token
-            after = response.data.data.after;
-            if (!after) {
-                break;
-            }
-            
-            // Rate limiting - wait between requests
-            await new Promise(resolve => setTimeout(resolve, CONFIG.SCROLL_DELAY));
         }
         
-        console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech`);
+        console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech using Reddit API`);
         
         // Save to cache
         savePostsCache(allPosts);
         
-        logRequestStats();
         return allPosts;
     } catch (error) {
-        console.error('Error fetching egortech posts:', error);
-        logRequestStats();
+        console.error('❌ Error fetching egortech posts:', error.message);
+        if (error.response) {
+            console.error('Response status:', error.response.status);
+            console.error('Response data:', error.response.data);
+        }
         return [];
     }
 }
 
-async function fetchPostContent(postUrl) {
+// Enhanced post content fetching using Reddit API OAuth
+async function fetchPostContent(postUrl, postId = null) {
     try {
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Increased rate limiting
+        // If we have the content from the posts fetch, use it directly
+        if (postId) {
+            // This will be handled by the enhanced fetchEgortechPosts function
+            // which now includes selftext_html in the post data
+            return null; // Signal to use the data from the post object
+        }
         
-        // Array of different user agents to rotate through
-        const userAgents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
-        ];
+        // Fallback: Get OAuth token and fetch individual post
+        const oauthToken = await getRedditOAuthToken();
+        if (!oauthToken) {
+            console.error('❌ Cannot fetch post content without OAuth token');
+            return '';
+        }
         
-        const currentUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+        // Extract post ID from URL if not provided
+        const postIdFromUrl = postUrl.match(/\/([^\/]+)\/$/);
+        if (!postIdFromUrl) {
+            console.error('❌ Could not extract post ID from URL:', postUrl);
+            return '';
+        }
         
-        // Retry logic with exponential backoff
-        let retryCount = 0;
-        const maxRetries = 2;
+        const actualPostId = postId || postIdFromUrl[1];
         
-        while (retryCount <= maxRetries) {
-            try {
-                const response = await axios.get(`${postUrl}.json`, {
-                    headers: {
-                        'User-Agent': currentUserAgent,
-                        'Accept': 'application/json, text/plain, */*',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
-                    },
-                    timeout: 15000
-                });
-                
-                const postData = Array.isArray(response.data)
-                    ? response.data[0].data.children[0].data
-                    : response.data?.data?.children?.[0]?.data;
-                return postData.selftext_html || '';
-            } catch (error) {
-                retryCount++;
-                
-                if (error.response?.status === 403) {
-                    console.log(`🚫 Post content blocked (403) - attempt ${retryCount}/${maxRetries + 1}`);
-                    if (retryCount > maxRetries) {
-                        console.log(`⚠️  Skipping post content for ${postUrl} due to blocking`);
-                        return '';
-                    }
-                    // Wait longer before retrying on 403
-                    await new Promise(resolve => setTimeout(resolve, 3000 * retryCount));
-                } else if (error.response?.status === 429) {
-                    console.log(`⏳ Post content rate limited (429) - waiting ${retryCount * 5} seconds`);
-                    await new Promise(resolve => setTimeout(resolve, retryCount * 5000));
-                } else {
-                    if (retryCount > maxRetries) {
-                        console.error(`❌ Failed to fetch post content after ${maxRetries + 1} attempts:`, error.message);
-                        return '';
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                }
-            }
+        // Use Reddit API OAuth endpoint for individual post
+        const url = `${REDDIT.apiBase}/comments/${actualPostId}?raw_json=1`;
+        
+        const response = await axios.get(url, {
+            headers: {
+                'Authorization': `bearer ${oauthToken}`,
+                'User-Agent': REDDIT.userAgent
+            },
+            timeout: 30000
+        });
+        
+        // Reddit comments API returns an array, first element is the post
+        if (Array.isArray(response.data) && response.data.length > 0) {
+            const postData = response.data[0].data.children[0].data;
+            return postData.selftext_html || postData.selftext || '';
         }
         
         return '';
     } catch (error) {
-        console.error('Error fetching post content:', error);
+        console.error('❌ Error fetching post content:', error.response?.status, error.response?.statusText);
         return '';
     }
 }
@@ -1396,19 +1221,6 @@ async function processEgortechData() {
         
         console.log(`🔄 Processing ${posts.length} egortech Formula 1 posts`);
         
-        // If no posts were fetched (likely due to Reddit blocking), try to use existing cache
-        if (posts.length === 0) {
-            console.log('⚠️  No posts fetched, checking for existing cache...');
-            const existingCache = cache.grandPrix;
-            if (existingCache && existingCache.size > 0) {
-                console.log(`✅ Using existing cache with ${existingCache.size} Grand Prix entries`);
-                return existingCache;
-            } else {
-                console.log('❌ No posts and no existing cache available');
-                return new Map();
-            }
-        }
-        
         // Count how many posts are already fully processed
         let skippedCount = 0;
         let newPostsCount = 0;
@@ -1468,7 +1280,18 @@ async function processEgortechData() {
                     continue;
                 }
                 
-                const postContent = await fetchPostContent(post.url);
+                // Use post content from API response if available, otherwise fetch it
+                let postContent = post.selftext_html || post.selftext || '';
+                if (!postContent) {
+                    console.log(`    📡 Fetching content for post ${post.id}...`);
+                    postContent = await fetchPostContent(post.url, post.id);
+                }
+                
+                if (!postContent) {
+                    console.log(`    ⚠️  No content found for post ${post.id}`);
+                    continue;
+                }
+                
                 const magnetLink = extractMagnetLink(postContent);
                 
                 if (!magnetLink) {
@@ -1478,6 +1301,11 @@ async function processEgortechData() {
                 
                 const quality = extractQualityFromTitle(post.title);
                 const postSessions = extractSessionsFromContent(postContent);
+                
+                if (postSessions.length === 0) {
+                    console.log(`    ⚠️  No sessions found in post ${post.id}`);
+                    continue;
+                }
                 
                 // Add sessions to the set
                 postSessions.forEach(session => allSessions.add(session.name));
@@ -1494,6 +1322,7 @@ async function processEgortechData() {
                 
                 hasNewPosts = true;
                 newPostsCount++;
+                console.log(`    ✅ Processed post ${post.id} (${quality}, ${postSessions.length} sessions)`);
             }
             
             // If no new posts to process, preserve existing cached data
@@ -2143,6 +1972,28 @@ async function startServer() {
         console.log('🔑 This addon REQUIRES Real-Debrid to function');
     }
     
+    // Load Reddit API configuration
+    console.log('\n🔧 Reddit API Configuration Check:');
+    const redditConfigured = loadRedditConfig();
+    if (redditConfigured) {
+        console.log('✅ Reddit API credentials configured');
+        console.log(`   Client ID: ${REDDIT.clientId.substring(0, 8)}...`);
+        console.log(`   Username: ${REDDIT.username}`);
+    } else {
+        console.log('❌ Reddit API credentials NOT configured');
+        console.log('📋 Required for Reddit API access:');
+        console.log('   Option 1 - Environment variables:');
+        console.log('   - REDDIT_CLIENT_ID (from Reddit app settings)');
+        console.log('   - REDDIT_CLIENT_SECRET (from Reddit app settings)');
+        console.log('   - REDDIT_USERNAME (your Reddit username)');
+        console.log('   - REDDIT_PASSWORD (your Reddit password or app password)');
+        console.log('\n   Option 2 - Use the configuration page:');
+        console.log(`   ${PUBLIC_BASE_URL}/config.html`);
+        console.log('\n🔗 Create a Reddit app at: https://www.reddit.com/prefs/apps');
+        console.log('   Choose "script" as the app type');
+        console.log('\n⚠️  Without Reddit API credentials, the addon cannot fetch posts!');
+    }
+    
     // Load existing cache for faster processing
     console.log('📁 Loading existing cache for faster processing...');
     const cacheLoaded = loadCacheFromFile();
@@ -2215,71 +2066,85 @@ async function startServer() {
         }
     });
     
-    // Debug endpoint to test Reddit connectivity
-    app.get('/api/debug/reddit', async (req, res) => {
+    // Reddit API configuration endpoints
+    app.post('/api/test-reddit', express.json(), async (req, res) => {
         try {
-            console.log('🔍 Debug: Testing Reddit connectivity...');
-            const connectivityTest = await testRedditConnectivity();
-            logRequestStats();
+            const { clientId, clientSecret, username, password } = req.body;
+            if (!clientId || !clientSecret || !username || !password) {
+                return res.status(400).json({ error: 'All Reddit API fields are required' });
+            }
             
-            res.json({
-                connectivity: connectivityTest,
-                stats: requestStats,
-                config: {
-                    userAgent: REDDIT.userAgent,
-                    oauthAvailable: !!(REDDIT.clientId && REDDIT.clientSecret),
-                    environment: process.env.NODE_ENV || 'development',
-                    platform: process.platform
-                }
+            // Test Reddit OAuth authentication
+            const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+            const body = new URLSearchParams();
+            body.append('grant_type', 'password');
+            body.append('username', username);
+            body.append('password', password);
+            
+            const response = await axios.post('https://www.reddit.com/api/v1/access_token', body.toString(), {
+                headers: {
+                    'Authorization': `Basic ${authHeader}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'Stremula1/2.0 (by u/stremula1-bot)'
+                },
+                timeout: 30000
             });
+            
+            if (response.data?.access_token) {
+                res.json({ success: true, username: username, message: 'Reddit API authentication successful!' });
+            } else {
+                res.status(400).json({ error: 'Failed to authenticate with Reddit API' });
+            }
         } catch (error) {
-            res.status(500).json({ error: error.message });
+            console.error('Error testing Reddit API:', error.response?.data || error.message);
+            if (error.response?.status === 401) {
+                res.status(400).json({ error: 'Invalid Reddit credentials' });
+            } else {
+                res.status(500).json({ error: 'Failed to test Reddit API credentials' });
+            }
         }
     });
     
-    // Debug endpoint to test specific Reddit endpoints
-    app.get('/api/debug/reddit/test/:endpoint', async (req, res) => {
+    app.post('/api/reddit-config', express.json(), (req, res) => {
         try {
-            const { endpoint } = req.params;
-            const testUrls = {
-                'home': 'https://www.reddit.com/.json',
-                'subreddit': 'https://www.reddit.com/r/MotorsportsReplays/.json',
-                'user': 'https://www.reddit.com/user/egortech/.json',
-                'user-submitted': 'https://www.reddit.com/user/egortech/submitted/.json',
-                'search': 'https://www.reddit.com/r/MotorsportsReplays/search.json?q=author:egortech&sort=new&t=all'
-            };
-            
-            const url = testUrls[endpoint];
-            if (!url) {
-                return res.status(400).json({ error: 'Invalid endpoint' });
+            const { clientId, clientSecret, username, password } = req.body;
+            if (!clientId || !clientSecret || !username || !password) {
+                return res.status(400).json({ error: 'All Reddit API fields are required' });
             }
             
-            console.log(`🔍 Testing endpoint: ${endpoint} (${url})`);
+            const config = { 
+                clientId, 
+                clientSecret, 
+                username, 
+                password, 
+                enabled: true, 
+                lastUpdated: new Date().toISOString() 
+            };
             
-            const response = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'en-US,en;q=0.9'
-                },
-                timeout: 15000
-            });
-            
-            res.json({
-                success: true,
-                status: response.status,
-                headers: response.headers,
-                dataSize: JSON.stringify(response.data).length,
-                endpoint: endpoint,
-                url: url
-            });
+            fs.writeFileSync(path.join(__dirname, 'reddit-config.json'), JSON.stringify(config, null, 2));
+            res.json({ success: true, message: 'Reddit configuration saved successfully' });
         } catch (error) {
-            res.status(500).json({
-                error: error.message,
-                status: error.response?.status,
-                statusText: error.response?.statusText,
-                endpoint: req.params.endpoint
-            });
+            console.error('Error saving Reddit configuration:', error);
+            res.status(500).json({ error: 'Failed to save Reddit configuration' });
+        }
+    });
+    
+    app.get('/api/reddit-config', (_req, res) => {
+        try {
+            const configPath = path.join(__dirname, 'reddit-config.json');
+            if (fs.existsSync(configPath)) {
+                const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                // Don't return sensitive data, just show if configured
+                return res.json({ 
+                    configured: true, 
+                    username: config.username,
+                    clientId: config.clientId ? `${config.clientId.substring(0, 8)}...` : null
+                });
+            }
+            res.json({ configured: false });
+        } catch (error) {
+            console.error('Error reading Reddit configuration:', error);
+            res.status(500).json({ error: 'Failed to read Reddit configuration' });
         }
     });
     // Minimal addon status endpoint
@@ -2296,6 +2161,10 @@ async function startServer() {
                 realdebrid: {
                     enabled: !!realdebridConfig?.enabled,
                     configured: !!realdebridConfig?.apiKey
+                },
+                reddit: {
+                    configured: !!(REDDIT.clientId && REDDIT.clientSecret && REDDIT.username && REDDIT.password),
+                    username: REDDIT.username || null
                 }
             });
         } catch (_error) {
@@ -2347,8 +2216,8 @@ async function startServer() {
     console.log('✅ All magnet links have been pre-converted to streaming links!');
     console.log('✅ Addon is fully ready with optimized caching system!');
     
-    // Schedule periodic updates (every 60 minutes to reduce Reddit API pressure)
-    cron.schedule('0 */1 * * *', () => {
+    // Schedule periodic updates (every 30 minutes)
+    cron.schedule('*/30 * * * *', () => {
         console.log('🔄 Starting scheduled cache update...');
         updateCache().catch(error => {
             console.error('Scheduled cache update failed:', error);

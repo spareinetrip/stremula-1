@@ -264,6 +264,87 @@
             <div id="status" class="status hidden"></div>
         </div>
         
+        <div class="section">
+            <h2>Configure Reddit API</h2>
+            <p>This addon requires Reddit API credentials to fetch Formula 1 posts. Without these, the addon cannot work.</p>
+            
+            <div class="info-box">
+                <h3>🔧 How to Get Reddit API Credentials</h3>
+                <ol>
+                    <li>Go to <a href="https://www.reddit.com/prefs/apps" target="_blank">Reddit App Preferences</a></li>
+                    <li>Click "Create App" or "Create Another App"</li>
+                    <li>Choose "script" as the app type</li>
+                    <li>Enter any name (e.g., "Stremula1")\li>
+                    <li>Copy the client ID (under the app name) and secret</li>
+                    <li>Use your Reddit username and password</li>
+                </ol>
+                <p><strong>Note:</strong> These credentials are stored as environment variables and are required for the addon to function.</p>
+            </div>
+            
+            <form id="redditConfigForm">
+                <div class="form-group">
+                    <label for="redditClientId">Reddit Client ID</label>
+                    <input 
+                        type="text" 
+                        id="redditClientId" 
+                        name="redditClientId" 
+                        placeholder="Enter your Reddit Client ID"
+                    >
+                    <div class="help-text">
+                        The client ID from your Reddit app (shown under the app name).
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="redditClientSecret">Reddit Client Secret</label>
+                    <input 
+                        type="password" 
+                        id="redditClientSecret" 
+                        name="redditClientSecret" 
+                        placeholder="Enter your Reddit Client Secret"
+                    >
+                    <div class="help-text">
+                        The secret from your Reddit app (shown as "secret").
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="redditUsername">Reddit Username</label>
+                    <input 
+                        type="text" 
+                        id="redditUsername" 
+                        name="redditUsername" 
+                        placeholder="Enter your Reddit username"
+                    >
+                    <div class="help-text">
+                        Your Reddit username (without u/ prefix).
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="redditPassword">Reddit Password</label>
+                    <input 
+                        type="password" 
+                        id="redditPassword" 
+                        name="redditPassword" 
+                        placeholder="Enter your Reddit password"
+                    >
+                    <div class="help-text">
+                        Your Reddit password or app-specific password.
+                    </div>
+                </div>
+                
+                <button type="button" class="btn" id="testRedditBtn">
+                    Test Reddit API
+                </button>
+                <button type="button" class="btn btn-secondary" id="saveRedditBtn">
+                    Save Reddit Config
+                </button>
+            </form>
+            
+            <div id="redditStatus" class="status hidden"></div>
+        </div>
+        
         <div id="resultSection" class="section result-section hidden">
             <h2>Install the Addon</h2>
             <p>Your Real Debrid configuration has been saved! Now install the addon in Stremio:</p>
@@ -305,7 +386,7 @@
                 <h3>About Deep Scrolling & Caching</h3>
                 <p>The addon now:</p>
                 <ul>
-                    <li><strong>Scrolls back 3 months:</strong> Finds older Formula 1 posts automatically</li>
+                    <li><strong>Scrolls back 5 months:</strong> Finds older Formula 1 posts automatically</li>
                     <li><strong>Persistent caching:</strong> Saves processed data to avoid re-processing</li>
                     <li><strong>Instant availability:</strong> Addon works immediately with cached data</li>
                     <li><strong>Background updates:</strong> Continues processing in the background</li>
@@ -552,6 +633,107 @@
                 progressFill.style.width = '0%';
                 progressText.textContent = progress.status;
             }
+        }
+        
+        // Test Reddit API credentials
+        document.getElementById('testRedditBtn').addEventListener('click', async () => {
+            const clientId = document.getElementById('redditClientId').value.trim();
+            const clientSecret = document.getElementById('redditClientSecret').value.trim();
+            const username = document.getElementById('redditUsername').value.trim();
+            const password = document.getElementById('redditPassword').value.trim();
+            const testBtn = document.getElementById('testRedditBtn');
+            
+            if (!clientId || !clientSecret || !username || !password) {
+                showRedditStatus('Please fill in all Reddit API fields', 'error');
+                return;
+            }
+            
+            testBtn.disabled = true;
+            testBtn.innerHTML = '<span class="loading"></span> Testing Reddit API...';
+            
+            try {
+                const response = await fetch('/api/test-reddit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        clientId, 
+                        clientSecret, 
+                        username, 
+                        password 
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showRedditStatus(`✅ Reddit API test successful! Welcome ${result.username}`, 'success');
+                } else {
+                    const error = await response.json();
+                    showRedditStatus(`❌ Reddit API test failed: ${error.error}`, 'error');
+                }
+            } catch (error) {
+                showRedditStatus('Error testing Reddit API. Please try again.', 'error');
+            } finally {
+                testBtn.disabled = false;
+                testBtn.textContent = 'Test Reddit API';
+            }
+        });
+        
+        // Save Reddit configuration
+        document.getElementById('saveRedditBtn').addEventListener('click', async () => {
+            const clientId = document.getElementById('redditClientId').value.trim();
+            const clientSecret = document.getElementById('redditClientSecret').value.trim();
+            const username = document.getElementById('redditUsername').value.trim();
+            const password = document.getElementById('redditPassword').value.trim();
+            const saveBtn = document.getElementById('saveRedditBtn');
+            
+            if (!clientId || !clientSecret || !username || !password) {
+                showRedditStatus('Please fill in all Reddit API fields', 'error');
+                return;
+            }
+            
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="loading"></span> Saving Reddit Config...';
+            
+            try {
+                const response = await fetch('/api/reddit-config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        clientId, 
+                        clientSecret, 
+                        username, 
+                        password 
+                    })
+                });
+                
+                if (response.ok) {
+                    showRedditStatus('✅ Reddit API configuration saved!', 'success');
+                } else {
+                    const error = await response.json();
+                    showRedditStatus(`❌ Failed to save Reddit config: ${error.error}`, 'error');
+                }
+            } catch (error) {
+                showRedditStatus('Error saving Reddit configuration. Please try again.', 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Reddit Config';
+            }
+        });
+        
+        // Show Reddit status message
+        function showRedditStatus(message, type) {
+            const statusDiv = document.getElementById('redditStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 5000);
         }
         
         // Load configuration on page load
