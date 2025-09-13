@@ -14,8 +14,15 @@ const CONFIG = {
     CACHE_FILE: path.join(__dirname, 'cache', 'addon-cache.json'),
     POSTS_CACHE_FILE: path.join(__dirname, 'cache', 'posts-cache.json'),
     FULLY_PROCESSED_POSTS_FILE: path.join(__dirname, 'cache', 'fully-processed-posts.json'),
-    MAX_SCROLL_MONTHS: 5, // Scroll back 5 months
-    SCROLL_DELAY: 2000 // 2 seconds between scroll requests
+    MAX_SCROLL_MONTHS: 6, // Scroll back 6 months
+    SCROLL_DELAY: 2000, // 2 seconds between scroll requests
+    // External cache configuration
+    EXTERNAL_CACHE_ENABLED: process.env.EXTERNAL_CACHE_ENABLED === 'true',
+    JSONBIN_API_KEY: process.env.JSONBIN_API_KEY || '',
+    JSONBIN_BASE_URL: 'https://api.jsonbin.io/v3/b',
+    JSONBIN_CACHE_BIN_ID: process.env.JSONBIN_CACHE_BIN_ID || '',
+    JSONBIN_POSTS_BIN_ID: process.env.JSONBIN_POSTS_BIN_ID || '',
+    JSONBIN_PROCESSED_BIN_ID: process.env.JSONBIN_PROCESSED_BIN_ID || ''
 };
 
 // Reddit API Configuration - REQUIRED for proper access
@@ -323,6 +330,235 @@ function loadFullyProcessedPosts() {
             const processedData = JSON.parse(fs.readFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, 'utf8'));
             console.log(`✅ Fully processed posts cache loaded: ${processedData.posts.length} posts`);
             return processedData.posts;
+        }
+    } catch (error) {
+        console.error('Error loading fully processed posts cache:', error);
+    }
+    return [];
+}
+
+// External Cache Functions (JSONBin.io)
+async function saveToExternalCache(binId, data) {
+    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_API_KEY || !binId) {
+        return false;
+    }
+    
+    try {
+        const response = await axios.put(`${CONFIG.JSONBIN_BASE_URL}/${binId}`, data, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': CONFIG.JSONBIN_API_KEY
+            },
+            timeout: 10000 // 10 second timeout
+        });
+        
+        if (response.status === 200) {
+            console.log(`🌐 External cache saved successfully (bin: ${binId})`);
+            return true;
+        }
+    } catch (error) {
+        console.error(`❌ Failed to save to external cache (bin: ${binId}):`, error.message);
+    }
+    return false;
+}
+
+async function loadFromExternalCache(binId) {
+    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_API_KEY || !binId) {
+        return null;
+    }
+    
+    try {
+        const response = await axios.get(`${CONFIG.JSONBIN_BASE_URL}/${binId}/latest`, {
+            headers: {
+                'X-Master-Key': CONFIG.JSONBIN_API_KEY
+            },
+            timeout: 10000 // 10 second timeout
+        });
+        
+        if (response.status === 200 && response.data.record) {
+            console.log(`🌐 External cache loaded successfully (bin: ${binId})`);
+            return response.data.record;
+        }
+    } catch (error) {
+        if (error.response?.status === 404) {
+            console.log(`📝 External cache not found (bin: ${binId}) - will create new one`);
+        } else {
+            console.error(`❌ Failed to load from external cache (bin: ${binId}):`, error.message);
+        }
+    }
+    return null;
+}
+
+// Enhanced cache functions with external storage fallback
+async function saveCacheToFileWithExternal() {
+    try {
+        // Save to local file first
+        const cacheData = {
+            grandPrix: Array.from(cache.grandPrix.entries()),
+            lastUpdate: cache.lastUpdate,
+            processingProgress: cache.processingProgress
+        };
+        fs.writeFileSync(CONFIG.CACHE_FILE, JSON.stringify(cacheData, null, 2));
+        console.log('💾 Cache saved to file');
+        
+        // Also save to external cache if enabled
+        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
+            await saveToExternalCache(CONFIG.JSONBIN_CACHE_BIN_ID, cacheData);
+        }
+    } catch (error) {
+        console.error('Error saving cache:', error);
+    }
+}
+
+async function loadCacheFromFileWithExternal() {
+    let cacheLoaded = false;
+    
+    // Try to load from local file first
+    try {
+        if (fs.existsSync(CONFIG.CACHE_FILE)) {
+            const cacheData = JSON.parse(fs.readFileSync(CONFIG.CACHE_FILE, 'utf8'));
+            cache.grandPrix = new Map(cacheData.grandPrix || []);
+            
+            // Convert sessions arrays back to Maps for each Grand Prix
+            for (const [gpName, gpData] of cache.grandPrix) {
+                if (gpData.sessions) {
+                    gpData.sessions = new Map(gpData.sessions);
+                }
+            }
+            
+            cache.lastUpdate = cacheData.lastUpdate || Date.now();
+            cache.processingProgress = cacheData.processingProgress || {};
+            cacheLoaded = true;
+            console.log(`📁 Local cache loaded: ${cache.grandPrix.size} Grand Prix`);
+        }
+    } catch (error) {
+        console.error('Error loading local cache:', error);
+    }
+    
+    // If local cache failed or is empty, try external cache
+    if (!cacheLoaded && CONFIG.EXTERNAL_CACHE_ENABLED) {
+        try {
+            const externalData = await loadFromExternalCache(CONFIG.JSONBIN_CACHE_BIN_ID);
+            if (externalData) {
+                cache.grandPrix = new Map(externalData.grandPrix || []);
+                
+                // Convert sessions arrays back to Maps for each Grand Prix
+                for (const [gpName, gpData] of cache.grandPrix) {
+                    if (gpData.sessions) {
+                        gpData.sessions = new Map(gpData.sessions);
+                    }
+                }
+                
+                cache.lastUpdate = externalData.lastUpdate || Date.now();
+                cache.processingProgress = externalData.processingProgress || {};
+                cacheLoaded = true;
+                console.log(`🌐 External cache loaded: ${cache.grandPrix.size} Grand Prix`);
+                
+                // Save to local file for faster future access
+                const cacheData = {
+                    grandPrix: Array.from(cache.grandPrix.entries()),
+                    lastUpdate: cache.lastUpdate,
+                    processingProgress: cache.processingProgress
+                };
+                fs.writeFileSync(CONFIG.CACHE_FILE, JSON.stringify(cacheData, null, 2));
+                console.log('💾 External cache data saved locally for faster access');
+            }
+        } catch (error) {
+            console.error('Error loading external cache:', error);
+        }
+    }
+    
+    return cacheLoaded;
+}
+
+async function savePostsCacheWithExternal(posts) {
+    try {
+        const postsData = {
+            posts: posts,
+            timestamp: Date.now()
+        };
+        fs.writeFileSync(CONFIG.POSTS_CACHE_FILE, JSON.stringify(postsData, null, 2));
+        console.log(`📝 Posts cache saved: ${posts.length} posts`);
+        
+        // Also save to external cache if enabled
+        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
+            await saveToExternalCache(CONFIG.JSONBIN_POSTS_BIN_ID, postsData);
+        }
+    } catch (error) {
+        console.error('Error saving posts cache:', error);
+    }
+}
+
+async function loadPostsCacheWithExternal() {
+    try {
+        // Try local file first
+        if (fs.existsSync(CONFIG.POSTS_CACHE_FILE)) {
+            const postsData = JSON.parse(fs.readFileSync(CONFIG.POSTS_CACHE_FILE, 'utf8'));
+            // Check if cache is not too old (24 hours)
+            const cacheAge = Date.now() - postsData.timestamp;
+            if (cacheAge < 24 * 60 * 60 * 1000) {
+                console.log(`📝 Posts cache loaded: ${postsData.posts.length} posts`);
+                return postsData.posts;
+            }
+        }
+        
+        // If local cache is old or missing, try external cache
+        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
+            const externalData = await loadFromExternalCache(CONFIG.JSONBIN_POSTS_BIN_ID);
+            if (externalData) {
+                const cacheAge = Date.now() - externalData.timestamp;
+                if (cacheAge < 24 * 60 * 60 * 1000) {
+                    console.log(`🌐 External posts cache loaded: ${externalData.posts.length} posts`);
+                    
+                    // Save to local file for faster future access
+                    fs.writeFileSync(CONFIG.POSTS_CACHE_FILE, JSON.stringify(externalData, null, 2));
+                    return externalData.posts;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading posts cache:', error);
+    }
+    return null;
+}
+
+async function saveFullyProcessedPostsWithExternal(fullyProcessedPosts) {
+    try {
+        const processedData = {
+            posts: fullyProcessedPosts,
+            timestamp: Date.now()
+        };
+        fs.writeFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, JSON.stringify(processedData, null, 2));
+        console.log(`✅ Fully processed posts cache saved: ${fullyProcessedPosts.length} posts`);
+        
+        // Also save to external cache if enabled
+        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
+            await saveToExternalCache(CONFIG.JSONBIN_PROCESSED_BIN_ID, processedData);
+        }
+    } catch (error) {
+        console.error('Error saving fully processed posts cache:', error);
+    }
+}
+
+async function loadFullyProcessedPostsWithExternal() {
+    try {
+        // Try local file first
+        if (fs.existsSync(CONFIG.FULLY_PROCESSED_POSTS_FILE)) {
+            const processedData = JSON.parse(fs.readFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, 'utf8'));
+            console.log(`✅ Fully processed posts cache loaded: ${processedData.posts.length} posts`);
+            return processedData.posts;
+        }
+        
+        // If local cache is missing, try external cache
+        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
+            const externalData = await loadFromExternalCache(CONFIG.JSONBIN_PROCESSED_BIN_ID);
+            if (externalData) {
+                console.log(`🌐 External fully processed posts cache loaded: ${externalData.posts.length} posts`);
+                
+                // Save to local file for faster future access
+                fs.writeFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, JSON.stringify(externalData, null, 2));
+                return externalData.posts;
+            }
         }
     } catch (error) {
         console.error('Error loading fully processed posts cache:', error);
@@ -929,7 +1165,7 @@ async function fetchEgortechPosts() {
         console.log('🔍 Fetching egortech posts using Reddit API...');
         
         // Check cache first
-        const cachedPosts = loadPostsCache();
+        const cachedPosts = await loadPostsCacheWithExternal();
         if (cachedPosts) {
             console.log(`📝 Using cached posts: ${cachedPosts.length} posts`);
             return cachedPosts;
@@ -1044,7 +1280,7 @@ async function fetchEgortechPosts() {
         console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech using Reddit API`);
         
         // Save to cache
-        savePostsCache(allPosts);
+        await savePostsCacheWithExternal(allPosts);
         
         return allPosts;
     } catch (error) {
@@ -1222,7 +1458,7 @@ async function processEgortechData() {
         const processedData = new Map();
         
         // Load fully processed posts cache
-        let fullyProcessedPosts = loadFullyProcessedPosts();
+        let fullyProcessedPosts = await loadFullyProcessedPostsWithExternal();
         console.log(`✅ Loaded ${fullyProcessedPosts.length} fully processed posts from cache`);
         
         // Clean up old posts
@@ -1440,7 +1676,7 @@ async function processEgortechData() {
             // Save progress to cache file periodically
             if (currentGp % 3 === 0) {
                 cache.grandPrix = processedData;
-                saveCacheToFile();
+                await saveCacheToFileWithExternal();
             }
         }
         
@@ -1463,10 +1699,10 @@ async function processEgortechData() {
         }
         
         console.log(`💾 Cache updated with ${processedData.size} Grand Prix`);
-        saveCacheToFile();
+        await saveCacheToFileWithExternal();
         
         // Save fully processed posts cache
-        saveFullyProcessedPosts(fullyProcessedPosts);
+        await saveFullyProcessedPostsWithExternal(fullyProcessedPosts);
         
         // Log caching benefits
         console.log(`\n=== CACHING BENEFITS ===`);
@@ -1904,7 +2140,7 @@ function setupCommandInterface() {
             const grandPrixName = parts.slice(2).join(' ');
             
             try {
-                let fullyProcessedPosts = loadFullyProcessedPosts();
+                let fullyProcessedPosts = await loadFullyProcessedPostsWithExternal();
                 
                 // Check if post already exists
                 const existingIndex = fullyProcessedPosts.findIndex(p => p.id === postId);
@@ -1924,7 +2160,7 @@ function setupCommandInterface() {
                 ];
                 
                 addToFullyProcessedPosts(postId, grandPrixName, mockSessions, fullyProcessedPosts);
-                saveFullyProcessedPosts(fullyProcessedPosts);
+                await saveFullyProcessedPostsWithExternal(fullyProcessedPosts);
                 
                 console.log(`✅ Successfully added post ${postId} (${grandPrixName}) to fully processed list`);
                 console.log('🔄 The addon will skip this post in future processing runs');
@@ -1946,7 +2182,7 @@ function setupCommandInterface() {
             const postId = parts[1];
             
             try {
-                let fullyProcessedPosts = loadFullyProcessedPosts();
+                let fullyProcessedPosts = await loadFullyProcessedPostsWithExternal();
                 const originalLength = fullyProcessedPosts.length;
                 
                 fullyProcessedPosts = fullyProcessedPosts.filter(p => p.id !== postId);
@@ -1956,7 +2192,7 @@ function setupCommandInterface() {
                     return;
                 }
                 
-                saveFullyProcessedPosts(fullyProcessedPosts);
+                await saveFullyProcessedPostsWithExternal(fullyProcessedPosts);
                 console.log(`✅ Successfully removed post ${postId} from fully processed list`);
                 console.log('🔄 The addon will process this post again in future runs');
                 
@@ -2018,9 +2254,44 @@ async function startServer() {
         console.log('\n⚠️  Without Reddit API credentials, the addon cannot fetch posts!');
     }
     
+    // External Cache Configuration Check
+    console.log('\n🌐 External Cache Configuration Check:');
+    if (CONFIG.EXTERNAL_CACHE_ENABLED) {
+        console.log('✅ External cache enabled');
+        if (CONFIG.JSONBIN_API_KEY) {
+            console.log(`   API Key: ${CONFIG.JSONBIN_API_KEY.substring(0, 8)}...`);
+        } else {
+            console.log('❌ JSONBIN_API_KEY not configured');
+        }
+        if (CONFIG.JSONBIN_CACHE_BIN_ID) {
+            console.log(`   Cache Bin ID: ${CONFIG.JSONBIN_CACHE_BIN_ID}`);
+        } else {
+            console.log('❌ JSONBIN_CACHE_BIN_ID not configured');
+        }
+        if (CONFIG.JSONBIN_POSTS_BIN_ID) {
+            console.log(`   Posts Bin ID: ${CONFIG.JSONBIN_POSTS_BIN_ID}`);
+        } else {
+            console.log('❌ JSONBIN_POSTS_BIN_ID not configured');
+        }
+        if (CONFIG.JSONBIN_PROCESSED_BIN_ID) {
+            console.log(`   Processed Bin ID: ${CONFIG.JSONBIN_PROCESSED_BIN_ID}`);
+        } else {
+            console.log('❌ JSONBIN_PROCESSED_BIN_ID not configured');
+        }
+    } else {
+        console.log('⚠️  External cache disabled - using local files only');
+        console.log('📋 To enable external cache, set environment variables:');
+        console.log('   - EXTERNAL_CACHE_ENABLED=true');
+        console.log('   - JSONBIN_API_KEY=your_api_key');
+        console.log('   - JSONBIN_CACHE_BIN_ID=your_cache_bin_id');
+        console.log('   - JSONBIN_POSTS_BIN_ID=your_posts_bin_id');
+        console.log('   - JSONBIN_PROCESSED_BIN_ID=your_processed_bin_id');
+        console.log('\n🔗 Sign up at: https://jsonbin.io/');
+    }
+    
     // Load existing cache for faster processing
     console.log('📁 Loading existing cache for faster processing...');
-    const cacheLoaded = loadCacheFromFile();
+    const cacheLoaded = await loadCacheFromFileWithExternal();
     
     if (cacheLoaded && cache.grandPrix.size > 0) {
         console.log(`📁 Found existing cache with ${cache.grandPrix.size} Grand Prix`);
