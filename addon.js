@@ -707,6 +707,93 @@ function cleanupOldFullyProcessedPosts(fullyProcessedPosts) {
     return filteredPosts;
 }
 
+// Rebuild Grand Prix cache from fully processed posts
+async function rebuildCacheFromProcessedPosts(fullyProcessedPosts, allPosts) {
+    console.log('🔧 Rebuilding cache from fully processed posts...');
+    
+    // Group posts by Grand Prix
+    const postsByGrandPrix = new Map();
+    
+    for (const post of allPosts) {
+        const grandPrixName = extractGrandPrixName(post.title);
+        if (grandPrixName) {
+            if (!postsByGrandPrix.has(grandPrixName)) {
+                postsByGrandPrix.set(grandPrixName, []);
+            }
+            postsByGrandPrix.get(grandPrixName).push(post);
+        }
+    }
+    
+    // Rebuild cache for each Grand Prix that has fully processed posts
+    for (const [grandPrixName, posts] of postsByGrandPrix) {
+        const processedPostsForGp = fullyProcessedPosts.filter(p => p.grandPrixName === grandPrixName);
+        
+        if (processedPostsForGp.length > 0) {
+            console.log(`🔄 Rebuilding cache for ${grandPrixName} (${processedPostsForGp.length} processed posts)`);
+            
+            // Create Grand Prix data structure
+            const gpKey = `${grandPrixName}-${extractRoundNumber(posts[0].title)}`;
+            const sessions = new Map();
+            
+            // Add sessions from processed posts
+            for (const processedPost of processedPostsForGp) {
+                for (const session of processedPost.sessions) {
+                    sessions.set(session.name, {
+                        name: session.name,
+                        fullMatch: session.fullMatch,
+                        date: session.date,
+                        duration: session.duration,
+                        streamingLinks: {} // Will be populated when needed
+                    });
+                }
+            }
+            
+            // Add to cache
+            cache.grandPrix.set(gpKey, {
+                name: grandPrixName,
+                round: extractRoundNumber(posts[0].title),
+                country: extractCountry(grandPrixName),
+                posts: posts,
+                sessions: sessions
+            });
+            
+            console.log(`✅ Rebuilt cache for ${grandPrixName} with ${sessions.size} sessions`);
+        }
+    }
+    
+    // Save the rebuilt cache
+    await saveCacheToFileWithExternal();
+    console.log(`💾 Rebuilt cache saved with ${cache.grandPrix.size} Grand Prix`);
+}
+
+// Helper function to extract Grand Prix name from post title
+function extractGrandPrixName(title) {
+    const match = title.match(/Formula 1\. 2025\. R\d+\. (.+?)\. Weekend/);
+    return match ? match[1] : null;
+}
+
+// Helper function to extract round number from post title
+function extractRoundNumber(title) {
+    const match = title.match(/Formula 1\. 2025\. R(\d+)\./);
+    return match ? parseInt(match[1]) : 0;
+}
+
+// Helper function to extract country from Grand Prix name
+function extractCountry(grandPrixName) {
+    const countryMap = {
+        'Italian Grand Prix': 'Italy',
+        'Dutch Grand Prix': 'Netherlands',
+        'Hungarian Grand Prix': 'Hungary',
+        'Belgian Grand Prix': 'Belgium',
+        'British Grand Prix': 'United Kingdom',
+        'Austrian Grand Prix': 'Austria',
+        'Canadian Grand Prix': 'Canada',
+        'Spanish Grand Prix': 'Spain',
+        'Monaco Grand Prix': 'Monaco'
+    };
+    return countryMap[grandPrixName] || grandPrixName.replace(' Grand Prix', '');
+}
+
 // Utility Functions
 function getPosterForGrandPrix(gpName) {
     // Smart matching function for Grand Prix posters
@@ -1473,6 +1560,14 @@ async function processEgortechData() {
         
         // Clean up old posts
         fullyProcessedPosts = cleanupOldFullyProcessedPosts(fullyProcessedPosts);
+        
+        // If we have fully processed posts but insufficient Grand Prix cache, rebuild cache from posts
+        const expectedGrandPrixCount = new Set(fullyProcessedPosts.map(p => p.grandPrixName)).size;
+        if (fullyProcessedPosts.length > 0 && cache.grandPrix.size < expectedGrandPrixCount) {
+            console.log(`🔄 Rebuilding Grand Prix cache from fully processed posts...`);
+            console.log(`   Expected ${expectedGrandPrixCount} Grand Prix, found ${cache.grandPrix.size} in cache`);
+            await rebuildCacheFromProcessedPosts(fullyProcessedPosts, posts);
+        }
         
         console.log(`🔄 Processing ${posts.length} egortech Formula 1 posts`);
         
