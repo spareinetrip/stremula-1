@@ -22,11 +22,11 @@ I've implemented an external cache system using JSONBin.io that persists your ca
 2. Sign up for a free account
 3. Verify your email
 
-#### Step 2: Create Access Key
+#### Step 2: Create API Key
 1. Log into your JSONBin.io dashboard
 2. Go to "API Keys" section
-3. Create a new access key with permissions: Bins, Create, Read, Update
-4. Copy the **Access Key ID** (looks like `68c60125d0ea881f407d128e`)
+3. Create a new API key
+4. Copy the API key (starts with `$2a$10$...`)
 
 #### Step 3: Create Bins
 You need to create 3 separate bins for different cache types:
@@ -51,13 +51,13 @@ Add these environment variables to your Render service:
 
 ```
 EXTERNAL_CACHE_ENABLED=true
-JSONBIN_ACCESS_KEY_ID=your_access_key_id_here
+JSONBIN_API_KEY=your_api_key_here
 JSONBIN_CACHE_BIN_ID=your_cache_bin_id_here
 JSONBIN_POSTS_BIN_ID=your_posts_bin_id_here
 JSONBIN_PROCESSED_BIN_ID=your_processed_bin_id_here
 ```
 
-Replace the placeholder values with your actual Access Key ID and bin IDs.
+Replace the placeholder values with your actual API key and bin IDs.
 
 #### Step 5: Deploy and Test
 1. Deploy your updated addon to Render
@@ -65,7 +65,7 @@ Replace the placeholder values with your actual Access Key ID and bin IDs.
    ```
    🌐 External Cache Configuration Check:
    ✅ External cache enabled
-      Access Key ID: 68c60125...
+      API Key: $2a$10$...
       Cache Bin ID: 507f1f77bcf86cd799439011
       Posts Bin ID: 507f1f77bcf86cd799439012
       Processed Bin ID: 507f1f77bcf86cd799439013
@@ -89,7 +89,7 @@ The addon will log cache operations:
 ### Troubleshooting
 
 **Cache not loading?**
-- Check your Access Key ID is correct
+- Check your API key is correct
 - Verify bin IDs are correct
 - Check JSONBin.io service status
 
@@ -118,7 +118,7 @@ If external cache fails for any reason:
 ## Quick Setup Checklist
 
 - [ ] Create JSONBin.io account
-- [ ] Generate Access Key ID
+- [ ] Generate API key
 - [ ] Create 3 bins (cache, posts, processed)
 - [ ] Add 5 environment variables to Render
 - [ ] Deploy and verify logs show external cache enabled

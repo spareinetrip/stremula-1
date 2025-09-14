@@ -14,12 +14,11 @@ const CONFIG = {
     CACHE_FILE: path.join(__dirname, 'cache', 'addon-cache.json'),
     POSTS_CACHE_FILE: path.join(__dirname, 'cache', 'posts-cache.json'),
     FULLY_PROCESSED_POSTS_FILE: path.join(__dirname, 'cache', 'fully-processed-posts.json'),
-    MAX_SCROLL_MONTHS: 6, // Scroll back 6 months
+    MAX_SCROLL_MONTHS: 4, // Scroll back 4 months
     SCROLL_DELAY: 2000, // 2 seconds between scroll requests
     // External cache configuration
     EXTERNAL_CACHE_ENABLED: process.env.EXTERNAL_CACHE_ENABLED === 'true',
     JSONBIN_API_KEY: process.env.JSONBIN_API_KEY || '',
-    JSONBIN_ACCESS_KEY_ID: process.env.JSONBIN_ACCESS_KEY_ID || '',
     JSONBIN_BASE_URL: 'https://api.jsonbin.io/v3/b',
     JSONBIN_CACHE_BIN_ID: process.env.JSONBIN_CACHE_BIN_ID || '',
     JSONBIN_POSTS_BIN_ID: process.env.JSONBIN_POSTS_BIN_ID || '',
@@ -340,7 +339,7 @@ function loadFullyProcessedPosts() {
 
 // External Cache Functions (JSONBin.io)
 async function saveToExternalCache(binId, data) {
-    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_ACCESS_KEY_ID || !binId) {
+    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_API_KEY || !binId) {
         return false;
     }
     
@@ -348,7 +347,7 @@ async function saveToExternalCache(binId, data) {
         const response = await axios.put(`${CONFIG.JSONBIN_BASE_URL}/${binId}`, data, {
             headers: {
                 'Content-Type': 'application/json',
-                'X-Access-Key': CONFIG.JSONBIN_ACCESS_KEY_ID
+                'X-Master-Key': CONFIG.JSONBIN_API_KEY
             },
             timeout: 10000 // 10 second timeout
         });
@@ -364,14 +363,14 @@ async function saveToExternalCache(binId, data) {
 }
 
 async function loadFromExternalCache(binId) {
-    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_ACCESS_KEY_ID || !binId) {
+    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_API_KEY || !binId) {
         return null;
     }
     
     try {
         const response = await axios.get(`${CONFIG.JSONBIN_BASE_URL}/${binId}/latest`, {
             headers: {
-                'X-Access-Key': CONFIG.JSONBIN_ACCESS_KEY_ID
+                'X-Master-Key': CONFIG.JSONBIN_API_KEY
             },
             timeout: 10000 // 10 second timeout
         });
@@ -2259,10 +2258,10 @@ async function startServer() {
     console.log('\n🌐 External Cache Configuration Check:');
     if (CONFIG.EXTERNAL_CACHE_ENABLED) {
         console.log('✅ External cache enabled');
-        if (CONFIG.JSONBIN_ACCESS_KEY_ID) {
-            console.log(`   Access Key ID: ${CONFIG.JSONBIN_ACCESS_KEY_ID.substring(0, 8)}...`);
+        if (CONFIG.JSONBIN_API_KEY) {
+            console.log(`   API Key: ${CONFIG.JSONBIN_API_KEY.substring(0, 8)}...`);
         } else {
-            console.log('❌ JSONBIN_ACCESS_KEY_ID not configured');
+            console.log('❌ JSONBIN_API_KEY not configured');
         }
         if (CONFIG.JSONBIN_CACHE_BIN_ID) {
             console.log(`   Cache Bin ID: ${CONFIG.JSONBIN_CACHE_BIN_ID}`);
@@ -2283,7 +2282,7 @@ async function startServer() {
         console.log('⚠️  External cache disabled - using local files only');
         console.log('📋 To enable external cache, set environment variables:');
         console.log('   - EXTERNAL_CACHE_ENABLED=true');
-        console.log('   - JSONBIN_ACCESS_KEY_ID=your_access_key_id');
+        console.log('   - JSONBIN_API_KEY=your_api_key');
         console.log('   - JSONBIN_CACHE_BIN_ID=your_cache_bin_id');
         console.log('   - JSONBIN_POSTS_BIN_ID=your_posts_bin_id');
         console.log('   - JSONBIN_PROCESSED_BIN_ID=your_processed_bin_id');
