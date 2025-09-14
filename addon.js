@@ -214,6 +214,13 @@ const builder = new addonBuilder(manifest);
 // Cache Management Functions
 function saveCacheToFile() {
     try {
+        // Create backup of existing cache before overwriting
+        if (fs.existsSync(CONFIG.CACHE_FILE)) {
+            const backupFile = path.join(__dirname, 'cache', 'addon-cache-backup.json');
+            fs.copyFileSync(CONFIG.CACHE_FILE, backupFile);
+            console.log('💾 Created cache backup');
+        }
+        
         // Convert Maps to arrays for JSON serialization
         const grandPrixData = Array.from(cache.grandPrix.entries()).map(([gpKey, gpData]) => {
             const serializedGpData = { ...gpData };
@@ -1488,6 +1495,40 @@ async function processEgortechData() {
             }
         }
         
+        // Additional preservation: Check if we lost Grand Prix due to MAX_SCROLL_MONTHS change
+        // Load the original cache to see what we had before
+        const originalCacheFile = path.join(__dirname, 'cache', 'addon-cache-backup.json');
+        if (fs.existsSync(originalCacheFile)) {
+            try {
+                const originalCacheData = JSON.parse(fs.readFileSync(originalCacheFile, 'utf8'));
+                const originalGrandPrix = new Map(originalCacheData.grandPrix || []);
+                
+                // Convert sessions arrays back to Maps for each Grand Prix
+                for (const [gpKey, gpData] of originalGrandPrix) {
+                    if (gpData.sessions) {
+                        if (Array.isArray(gpData.sessions)) {
+                            gpData.sessions = new Map(gpData.sessions);
+                        } else if (typeof gpData.sessions === 'object' && Object.keys(gpData.sessions).length === 0) {
+                            gpData.sessions = new Map();
+                        } else if (typeof gpData.sessions === 'object' && Object.keys(gpData.sessions).length > 0) {
+                            gpData.sessions = new Map(Object.entries(gpData.sessions));
+                        }
+                    }
+                }
+                
+                // Restore any Grand Prix that were lost
+                for (const [gpKey, originalGpData] of originalGrandPrix) {
+                    if (!processedData.has(gpKey) && originalGpData.sessions && originalGpData.sessions.size > 0) {
+                        processedData.set(gpKey, originalGpData);
+                        preservedGpCount++;
+                        console.log(`🔄 Restored lost Grand Prix from backup: ${originalGpData.name} (${originalGpData.sessions.size} sessions)`);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading backup cache:', error);
+            }
+        }
+        
         console.log(`💾 Cache updated with ${processedData.size} Grand Prix`);
         saveCacheToFile();
         
@@ -1886,6 +1927,7 @@ function setupCommandInterface() {
     console.log('  remove <post_id> - Remove a post from fully processed list');
     console.log('  list - Show all fully processed posts');
     console.log('  refresh - Force refresh posts cache (respects MAX_SCROLL_MONTHS)');
+    console.log('  restore - Restore Grand Prix from backup cache');
     console.log('  help - Show this help message');
     console.log('  exit - Exit the command interface');
     console.log('Example: add 1kyml0a "Spanish Grand Prix"\n');
@@ -1905,6 +1947,7 @@ function setupCommandInterface() {
             console.log('  remove <post_id> - Remove a post from fully processed list');
             console.log('  list - Show all fully processed posts');
             console.log('  refresh - Force refresh posts cache (respects MAX_SCROLL_MONTHS)');
+            console.log('  restore - Restore Grand Prix from backup cache');
             console.log('  help - Show this help message');
             console.log('  exit - Exit the command interface');
             console.log('Example: add 1kyml0a "Spanish Grand Prix"\n');
@@ -1939,6 +1982,56 @@ function setupCommandInterface() {
                 
             } catch (error) {
                 console.error('❌ Error refreshing cache:', error.message);
+            }
+            return;
+        }
+        
+        if (command === 'restore') {
+            try {
+                console.log('🔄 Restoring Grand Prix from backup cache...');
+                
+                const backupFile = path.join(__dirname, 'cache', 'addon-cache-backup.json');
+                if (!fs.existsSync(backupFile)) {
+                    console.log('❌ No backup cache file found');
+                    return;
+                }
+                
+                // Load backup cache
+                const backupData = JSON.parse(fs.readFileSync(backupFile, 'utf8'));
+                const backupGrandPrix = new Map(backupData.grandPrix || []);
+                
+                // Convert sessions arrays back to Maps
+                for (const [gpKey, gpData] of backupGrandPrix) {
+                    if (gpData.sessions) {
+                        if (Array.isArray(gpData.sessions)) {
+                            gpData.sessions = new Map(gpData.sessions);
+                        } else if (typeof gpData.sessions === 'object' && Object.keys(gpData.sessions).length === 0) {
+                            gpData.sessions = new Map();
+                        } else if (typeof gpData.sessions === 'object' && Object.keys(gpData.sessions).length > 0) {
+                            gpData.sessions = new Map(Object.entries(gpData.sessions));
+                        }
+                    }
+                }
+                
+                // Restore to current cache
+                let restoredCount = 0;
+                for (const [gpKey, gpData] of backupGrandPrix) {
+                    if (!cache.grandPrix.has(gpKey) && gpData.sessions && gpData.sessions.size > 0) {
+                        cache.grandPrix.set(gpKey, gpData);
+                        restoredCount++;
+                        console.log(`✅ Restored: ${gpData.name} (${gpData.sessions.size} sessions)`);
+                    }
+                }
+                
+                if (restoredCount > 0) {
+                    saveCacheToFile();
+                    console.log(`✅ Successfully restored ${restoredCount} Grand Prix from backup`);
+                } else {
+                    console.log('ℹ️  No Grand Prix needed restoration');
+                }
+                
+            } catch (error) {
+                console.error('❌ Error restoring from backup:', error.message);
             }
             return;
         }
