@@ -417,11 +417,16 @@ async function loadCacheFromFileWithExternal() {
     try {
         if (fs.existsSync(CONFIG.CACHE_FILE)) {
             const cacheData = JSON.parse(fs.readFileSync(CONFIG.CACHE_FILE, 'utf8'));
-            cache.grandPrix = new Map(cacheData.grandPrix || []);
+            // Handle both array format (from external cache) and Map format (from local cache)
+            if (Array.isArray(cacheData.grandPrix)) {
+                cache.grandPrix = new Map(cacheData.grandPrix);
+            } else {
+                cache.grandPrix = new Map(cacheData.grandPrix || []);
+            }
             
             // Convert sessions arrays back to Maps for each Grand Prix
             for (const [gpName, gpData] of cache.grandPrix) {
-                if (gpData.sessions) {
+                if (gpData.sessions && Array.isArray(gpData.sessions)) {
                     gpData.sessions = new Map(gpData.sessions);
                 }
             }
@@ -440,11 +445,16 @@ async function loadCacheFromFileWithExternal() {
         try {
             const externalData = await loadFromExternalCache(CONFIG.JSONBIN_CACHE_BIN_ID);
             if (externalData) {
-                cache.grandPrix = new Map(externalData.grandPrix || []);
+                // Handle both array format (from external cache) and Map format (from local cache)
+                if (Array.isArray(externalData.grandPrix)) {
+                    cache.grandPrix = new Map(externalData.grandPrix);
+                } else {
+                    cache.grandPrix = new Map(externalData.grandPrix || []);
+                }
                 
                 // Convert sessions arrays back to Maps for each Grand Prix
                 for (const [gpName, gpData] of cache.grandPrix) {
-                    if (gpData.sessions) {
+                    if (gpData.sessions && Array.isArray(gpData.sessions)) {
                         gpData.sessions = new Map(gpData.sessions);
                     }
                 }
