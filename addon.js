@@ -424,12 +424,32 @@ async function loadFromExternalCache(binId) {
 // Enhanced cache functions with external storage fallback
 async function saveCacheToFileWithExternal() {
     try {
-        // Save to local file first
+        // Convert Maps to arrays for JSON serialization
+        const serializedGrandPrix = Array.from(cache.grandPrix.entries()).map(([key, gpData]) => {
+            const serializedGpData = { ...gpData };
+            
+            // Convert sessions Map to array for JSON serialization
+            if (gpData.sessions && gpData.sessions instanceof Map) {
+                serializedGpData.sessions = Array.from(gpData.sessions.entries());
+                console.log(`💾 Serializing ${gpData.name}: ${gpData.sessions.size} sessions to array`);
+            } else if (gpData.sessions && Array.isArray(gpData.sessions)) {
+                // Already serialized
+                serializedGpData.sessions = gpData.sessions;
+                console.log(`💾 ${gpData.name}: sessions already serialized (${gpData.sessions.length} entries)`);
+            } else {
+                console.log(`⚠️  ${gpData.name}: invalid sessions data during serialization`);
+                serializedGpData.sessions = [];
+            }
+            
+            return [key, serializedGpData];
+        });
+        
         const cacheData = {
-            grandPrix: Array.from(cache.grandPrix.entries()),
+            grandPrix: serializedGrandPrix,
             lastUpdate: cache.lastUpdate,
             processingProgress: cache.processingProgress
         };
+        
         fs.writeFileSync(CONFIG.CACHE_FILE, JSON.stringify(cacheData, null, 2));
         console.log('💾 Cache saved to file');
         
@@ -447,27 +467,45 @@ async function loadCacheFromFileWithExternal() {
     
     // Try to load from local file first
     try {
-        if (fs.existsSync(CONFIG.CACHE_FILE)) {
-            const cacheData = JSON.parse(fs.readFileSync(CONFIG.CACHE_FILE, 'utf8'));
-            // Handle both array format (from external cache) and Map format (from local cache)
-            if (Array.isArray(cacheData.grandPrix)) {
-                cache.grandPrix = new Map(cacheData.grandPrix);
-            } else {
-                cache.grandPrix = new Map(cacheData.grandPrix || []);
-            }
-            
-            // Convert sessions arrays back to Maps for each Grand Prix
-            for (const [gpName, gpData] of cache.grandPrix) {
-                if (gpData.sessions && Array.isArray(gpData.sessions)) {
-                    gpData.sessions = new Map(gpData.sessions);
+            if (fs.existsSync(CONFIG.CACHE_FILE)) {
+                const cacheData = JSON.parse(fs.readFileSync(CONFIG.CACHE_FILE, 'utf8'));
+                console.log(`📁 Loading local cache data...`);
+                
+                // Handle both array format (from external cache) and Map format (from local cache)
+                if (Array.isArray(cacheData.grandPrix)) {
+                    cache.grandPrix = new Map(cacheData.grandPrix);
+                    console.log(`📊 Converted ${cacheData.grandPrix.length} Grand Prix entries from array format`);
+                } else {
+                    cache.grandPrix = new Map(cacheData.grandPrix || []);
+                    console.log(`📊 Converted Grand Prix entries from object format`);
                 }
+                
+                // Convert sessions arrays back to Maps for each Grand Prix
+                for (const [gpName, gpData] of cache.grandPrix) {
+                    console.log(`🔍 Processing local cache: ${gpName}`);
+                    console.log(`📊 Sessions type: ${typeof gpData.sessions}`);
+                    
+                    if (gpData.sessions && Array.isArray(gpData.sessions)) {
+                        console.log(`📊 Converting ${gpData.sessions.length} sessions from array to Map`);
+                        gpData.sessions = new Map(gpData.sessions);
+                    } else if (gpData.sessions && gpData.sessions instanceof Map) {
+                        console.log(`📊 Sessions already in Map format (${gpData.sessions.size} sessions)`);
+                    } else if (gpData.sessions && typeof gpData.sessions === 'object') {
+                        console.log(`📊 Converting sessions object to Map`);
+                        gpData.sessions = new Map(Object.entries(gpData.sessions));
+                    } else {
+                        console.log(`⚠️  No valid sessions data found for ${gpName}, initializing empty Map`);
+                        gpData.sessions = new Map();
+                    }
+                    
+                    console.log(`✅ Final sessions Map size: ${gpData.sessions.size}`);
+                }
+                
+                cache.lastUpdate = cacheData.lastUpdate || Date.now();
+                cache.processingProgress = cacheData.processingProgress || {};
+                cacheLoaded = true;
+                console.log(`📁 Local cache loaded: ${cache.grandPrix.size} Grand Prix`);
             }
-            
-            cache.lastUpdate = cacheData.lastUpdate || Date.now();
-            cache.processingProgress = cacheData.processingProgress || {};
-            cacheLoaded = true;
-            console.log(`📁 Local cache loaded: ${cache.grandPrix.size} Grand Prix`);
-        }
     } catch (error) {
         console.error('Error loading local cache:', error);
     }
@@ -495,15 +533,23 @@ async function loadCacheFromFileWithExternal() {
                 for (const [gpName, gpData] of cache.grandPrix) {
                     console.log(`🔍 Processing Grand Prix: ${gpName}`);
                     console.log(`📊 GP data keys:`, Object.keys(gpData));
+                    console.log(`📊 Sessions type:`, typeof gpData.sessions);
+                    console.log(`📊 Sessions value:`, gpData.sessions);
                     
                     if (gpData.sessions && Array.isArray(gpData.sessions)) {
                         console.log(`📊 Converting ${gpData.sessions.length} sessions from array to Map`);
                         gpData.sessions = new Map(gpData.sessions);
-                    } else if (gpData.sessions) {
+                    } else if (gpData.sessions && gpData.sessions instanceof Map) {
                         console.log(`📊 Sessions already in Map format (${gpData.sessions.size} sessions)`);
+                    } else if (gpData.sessions && typeof gpData.sessions === 'object') {
+                        console.log(`📊 Converting sessions object to Map`);
+                        gpData.sessions = new Map(Object.entries(gpData.sessions));
                     } else {
-                        console.log(`⚠️  No sessions data found for ${gpName}`);
+                        console.log(`⚠️  No valid sessions data found for ${gpName}, initializing empty Map`);
+                        gpData.sessions = new Map();
                     }
+                    
+                    console.log(`✅ Final sessions Map size: ${gpData.sessions.size}`);
                 }
                 
                 cache.lastUpdate = externalData.lastUpdate || Date.now();
@@ -1759,17 +1805,30 @@ async function processEgortechData() {
                     console.log(`📊 Sessions Map size: ${existingGpData.sessions.size}`);
                 } else if (Array.isArray(existingGpData.sessions)) {
                     console.log(`📊 Sessions array length: ${existingGpData.sessions.length}`);
-                } else {
+                } else if (typeof existingGpData.sessions === 'object') {
                     console.log(`📊 Sessions object keys:`, Object.keys(existingGpData.sessions));
+                } else {
+                    console.log(`📊 Sessions type: ${typeof existingGpData.sessions}, value: ${existingGpData.sessions}`);
                 }
+            } else {
+                console.log(`📊 No sessions data found for ${existingGpData.name}`);
             }
             
-            if (!processedData.has(gpKey) && existingGpData.sessions && existingGpData.sessions.size > 0) {
+            // Check if we should preserve this Grand Prix
+            const hasValidSessions = existingGpData.sessions && 
+                                   existingGpData.sessions instanceof Map && 
+                                   existingGpData.sessions.size > 0;
+            
+            if (!processedData.has(gpKey) && hasValidSessions) {
                 processedData.set(gpKey, existingGpData);
                 preservedGpCount++;
                 console.log(`✅ Preserved older Grand Prix from cache: ${existingGpData.name} (${existingGpData.sessions.size} sessions)`);
             } else {
-                console.log(`⚠️  Skipping ${existingGpData.name} - ${!processedData.has(gpKey) ? 'already processed' : 'invalid sessions data'}`);
+                const reason = processedData.has(gpKey) ? 'already processed' : 
+                             !existingGpData.sessions ? 'no sessions data' :
+                             !(existingGpData.sessions instanceof Map) ? 'sessions not a Map' :
+                             existingGpData.sessions.size === 0 ? 'empty sessions' : 'unknown reason';
+                console.log(`⚠️  Skipping ${existingGpData.name} - ${reason}`);
             }
         }
         
