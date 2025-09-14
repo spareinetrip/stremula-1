@@ -14,8 +14,9 @@ const CONFIG = {
     CACHE_FILE: path.join(__dirname, 'cache', 'addon-cache.json'),
     POSTS_CACHE_FILE: path.join(__dirname, 'cache', 'posts-cache.json'),
     FULLY_PROCESSED_POSTS_FILE: path.join(__dirname, 'cache', 'fully-processed-posts.json'),
-    MAX_SCROLL_MONTHS: 5, // Scroll back 5 months
-    SCROLL_DELAY: 2000 // 2 seconds between scroll requests
+    MAX_SCROLL_MONTHS: 1, // Scroll back 1 months
+    SCROLL_DELAY: 500, // 0.5 seconds between scroll requests
+    MAX_CONSECUTIVE_EMPTY_PAGES: 1 // Stop fetching after 1 consecutive empty pages
 };
 
 // Reddit API Configuration - REQUIRED for proper access
@@ -288,13 +289,19 @@ function loadPostsCache() {
     try {
         if (fs.existsSync(CONFIG.POSTS_CACHE_FILE)) {
             const postsData = JSON.parse(fs.readFileSync(CONFIG.POSTS_CACHE_FILE, 'utf8'));
-            // Check if cache is not too old (24 hours)
-            const cacheAge = Date.now() - postsData.timestamp;
-            if (cacheAge < 24 * 60 * 60 * 1000) {
-                console.log(`📝 Posts cache loaded: ${postsData.posts.length} posts`);
+            
+            // Always check if posts are within MAX_SCROLL_MONTHS range
+            const maxScrollTime = Date.now() - (CONFIG.MAX_SCROLL_MONTHS * 30 * 24 * 60 * 60 * 1000);
+            const postsInRange = postsData.posts.filter(post => {
+                const postTime = post.created * 1000; // Convert to milliseconds
+                return postTime >= maxScrollTime;
+            });
+            
+            if (postsInRange.length === postsData.posts.length) {
+                console.log(`📝 Posts cache loaded: ${postsData.posts.length} posts (all within ${CONFIG.MAX_SCROLL_MONTHS} months)`);
                 return postsData.posts;
             } else {
-                console.log('⏰ Posts cache expired, refreshing...');
+                console.log(`⏰ Posts cache contains ${postsData.posts.length - postsInRange.length} posts outside ${CONFIG.MAX_SCROLL_MONTHS} month range, refreshing...`);
             }
         }
     } catch (error) {
@@ -928,12 +935,8 @@ async function fetchEgortechPosts() {
     try {
         console.log('🔍 Fetching egortech posts using Reddit API...');
         
-        // Check cache first
-        const cachedPosts = loadPostsCache();
-        if (cachedPosts) {
-            console.log(`📝 Using cached posts: ${cachedPosts.length} posts`);
-            return cachedPosts;
-        }
+        // Always fetch fresh posts to check for new ones
+        // The cache will be used later to skip processing already-processed posts
         
         // Get OAuth token - REQUIRED for API access
         const oauthToken = await getRedditOAuthToken();
@@ -950,8 +953,9 @@ async function fetchEgortechPosts() {
         const allPosts = [];
         let after = null;
         let pageCount = 0;
+        let consecutiveEmptyPages = 0;
         const maxPages = 50; // Limit to prevent infinite loops
-        const threeMonthsAgo = Date.now() - (CONFIG.MAX_SCROLL_MONTHS * 30 * 24 * 60 * 60 * 1000);
+        const maxScrollTime = Date.now() - (CONFIG.MAX_SCROLL_MONTHS * 30 * 24 * 60 * 60 * 1000);
         
         console.log('📡 Using Reddit OAuth API for reliable access...');
         
@@ -988,7 +992,7 @@ async function fetchEgortechPosts() {
                         const created = post.data?.created_utc * 1000; // Convert to ms
                         
                         // Only include posts that start with 'Formula 1' and are within our time range
-                        return title && title.startsWith('Formula 1') && created >= threeMonthsAgo;
+                        return title && title.startsWith('Formula 1') && created >= maxScrollTime;
                     })
                     .map(post => ({
                         title: post.data.title,
@@ -1000,14 +1004,25 @@ async function fetchEgortechPosts() {
                         selftext_html: post.data.selftext_html || ''
                     }));
                 
-                allPosts.push(...pagePosts);
-                console.log(`📝 Found ${pagePosts.length} Formula 1 posts on page ${pageCount}`);
-                
-                // Check if we've gone back far enough
-                if (pagePosts.length > 0) {
+                // Check if this page has any Formula 1 posts
+                if (pagePosts.length === 0) {
+                    consecutiveEmptyPages++;
+                    console.log(`📝 Found 0 Formula 1 posts on page ${pageCount} (${consecutiveEmptyPages} consecutive empty pages)`);
+                    
+                    // Stop if we've hit the threshold of consecutive empty pages
+                    if (consecutiveEmptyPages >= CONFIG.MAX_CONSECUTIVE_EMPTY_PAGES) {
+                        console.log(`🛑 Stopping fetch after ${consecutiveEmptyPages} consecutive empty pages`);
+                        break;
+                    }
+                } else {
+                    consecutiveEmptyPages = 0; // Reset counter when we find posts
+                    allPosts.push(...pagePosts);
+                    console.log(`📝 Found ${pagePosts.length} Formula 1 posts on page ${pageCount}`);
+                    
+                    // Check if we've gone back far enough
                     const oldestPost = Math.min(...pagePosts.map(p => p.created * 1000));
-                    if (oldestPost < threeMonthsAgo) {
-                        console.log('⏰ Reached time limit, stopping fetch');
+                    if (oldestPost < maxScrollTime) {
+                        console.log(`⏰ Reached ${CONFIG.MAX_SCROLL_MONTHS} month time limit, stopping fetch`);
                         break;
                     }
                 }
@@ -1043,7 +1058,7 @@ async function fetchEgortechPosts() {
         
         console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech using Reddit API`);
         
-        // Save to cache
+        // Always save fresh posts to cache for future reference
         savePostsCache(allPosts);
         
         return allPosts;
@@ -1234,6 +1249,17 @@ async function processEgortechData() {
         let skippedCount = 0;
         let newPostsCount = 0;
         let preservedGpCount = 0;
+        
+        // Check if we have cached posts to compare against
+        const cachedPosts = loadPostsCache();
+        const cachedPostIds = cachedPosts ? new Set(cachedPosts.map(p => p.id)) : new Set();
+        const newPostIds = posts.filter(post => !cachedPostIds.has(post.id));
+        
+        if (newPostIds.length > 0) {
+            console.log(`🆕 Found ${newPostIds.length} new posts since last run: ${newPostIds.map(p => p.id).join(', ')}`);
+        } else {
+            console.log(`📝 No new posts found since last run`);
+        }
         
         // Group posts by Grand Prix
         const gpPosts = new Map();
@@ -1468,9 +1494,10 @@ async function processEgortechData() {
         // Save fully processed posts cache
         saveFullyProcessedPosts(fullyProcessedPosts);
         
-        // Log caching benefits
-        console.log(`\n=== CACHING BENEFITS ===`);
-        console.log(`Total posts found: ${posts.length}`);
+        // Log processing summary
+        console.log(`\n=== PROCESSING SUMMARY ===`);
+        console.log(`Total posts fetched from Reddit: ${posts.length}`);
+        console.log(`New posts since last run: ${newPostIds.length}`);
         console.log(`Posts already fully processed (skipped): ${skippedCount}`);
         console.log(`New posts processed: ${newPostsCount}`);
         console.log(`Grand Prix preserved from cache: ${preservedGpCount}`);
@@ -1858,6 +1885,7 @@ function setupCommandInterface() {
     console.log('  add <post_id> <grand_prix_name> - Add a post to fully processed list');
     console.log('  remove <post_id> - Remove a post from fully processed list');
     console.log('  list - Show all fully processed posts');
+    console.log('  refresh - Force refresh posts cache (respects MAX_SCROLL_MONTHS)');
     console.log('  help - Show this help message');
     console.log('  exit - Exit the command interface');
     console.log('Example: add 1kyml0a "Spanish Grand Prix"\n');
@@ -1876,6 +1904,7 @@ function setupCommandInterface() {
             console.log('  add <post_id> <grand_prix_name> - Add a post to fully processed list');
             console.log('  remove <post_id> - Remove a post from fully processed list');
             console.log('  list - Show all fully processed posts');
+            console.log('  refresh - Force refresh posts cache (respects MAX_SCROLL_MONTHS)');
             console.log('  help - Show this help message');
             console.log('  exit - Exit the command interface');
             console.log('Example: add 1kyml0a "Spanish Grand Prix"\n');
@@ -1889,6 +1918,28 @@ function setupCommandInterface() {
                 console.log(`  ${index + 1}. ${post.id} - ${post.grandPrixName} (${post.sessionCount} sessions)`);
             });
             console.log('');
+            return;
+        }
+        
+        if (command === 'refresh') {
+            try {
+                console.log('🔄 Force refreshing posts cache...');
+                console.log(`📅 Current MAX_SCROLL_MONTHS setting: ${CONFIG.MAX_SCROLL_MONTHS} months`);
+                
+                // Delete posts cache to force refresh
+                if (fs.existsSync(CONFIG.POSTS_CACHE_FILE)) {
+                    fs.unlinkSync(CONFIG.POSTS_CACHE_FILE);
+                    console.log('🗑️  Deleted posts cache file');
+                }
+                
+                // Trigger cache update
+                console.log('🔄 Starting cache update...');
+                await updateCache();
+                console.log('✅ Cache refresh completed!');
+                
+            } catch (error) {
+                console.error('❌ Error refreshing cache:', error.message);
+            }
             return;
         }
         
@@ -2026,6 +2077,19 @@ async function startServer() {
         console.log(`📁 Found existing cache with ${cache.grandPrix.size} Grand Prix`);
     } else {
         console.log('📝 No existing cache found, will process all posts');
+    }
+    
+    // Check if MAX_SCROLL_MONTHS setting has changed and force refresh if needed
+    if (process.env.FORCE_REFRESH_CACHE === '1') {
+        console.log('🔄 FORCE_REFRESH_CACHE=1 detected, clearing cache...');
+        try {
+            if (fs.existsSync(CONFIG.POSTS_CACHE_FILE)) {
+                fs.unlinkSync(CONFIG.POSTS_CACHE_FILE);
+                console.log('🗑️  Deleted posts cache file');
+            }
+        } catch (error) {
+            console.error('Error clearing cache:', error);
+        }
     }
     
     // Start HTTP server immediately; process data in background to avoid platform boot timeouts
@@ -2208,7 +2272,8 @@ async function startServer() {
     // Kick off initial processing in background
     (async () => {
         console.log('\n🔄 Processing all posts in background...');
-        console.log('⏳ First run may take a while; cached runs are much faster.');
+        console.log('📡 Always checking for new posts, skipping already processed ones.');
+        console.log('⏳ First run may take a while; subsequent runs are much faster.');
         const progressInterval = setInterval(() => {
             if (cache.processingProgress.status !== 'idle') {
                 const { current, total, status } = cache.processingProgress;
