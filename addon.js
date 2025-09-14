@@ -14,15 +14,8 @@ const CONFIG = {
     CACHE_FILE: path.join(__dirname, 'cache', 'addon-cache.json'),
     POSTS_CACHE_FILE: path.join(__dirname, 'cache', 'posts-cache.json'),
     FULLY_PROCESSED_POSTS_FILE: path.join(__dirname, 'cache', 'fully-processed-posts.json'),
-    MAX_SCROLL_MONTHS: 4, // Scroll back 4 months
-    SCROLL_DELAY: 2000, // 2 seconds between scroll requests
-    // External cache configuration
-    EXTERNAL_CACHE_ENABLED: process.env.EXTERNAL_CACHE_ENABLED === 'true',
-    JSONBIN_API_KEY: process.env.JSONBIN_API_KEY || '',
-    JSONBIN_BASE_URL: 'https://api.jsonbin.io/v3/b',
-    JSONBIN_CACHE_BIN_ID: process.env.JSONBIN_CACHE_BIN_ID || '',
-    JSONBIN_POSTS_BIN_ID: process.env.JSONBIN_POSTS_BIN_ID || '',
-    JSONBIN_PROCESSED_BIN_ID: process.env.JSONBIN_PROCESSED_BIN_ID || ''
+    MAX_SCROLL_MONTHS: 5, // Scroll back 5 months
+    SCROLL_DELAY: 2000 // 2 seconds between scroll requests
 };
 
 // Reddit API Configuration - REQUIRED for proper access
@@ -330,338 +323,6 @@ function loadFullyProcessedPosts() {
             const processedData = JSON.parse(fs.readFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, 'utf8'));
             console.log(`✅ Fully processed posts cache loaded: ${processedData.posts.length} posts`);
             return processedData.posts;
-        }
-    } catch (error) {
-        console.error('Error loading fully processed posts cache:', error);
-    }
-    return [];
-}
-
-// External Cache Functions (JSONBin.io)
-async function saveToExternalCache(binId, data) {
-    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_API_KEY || !binId) {
-        console.log(`⚠️  External cache save skipped - disabled or missing config (bin: ${binId})`);
-        return false;
-    }
-    
-    try {
-        console.log(`💾 Attempting to save to external cache (bin: ${binId})`);
-        console.log(`📊 Data size: ${JSON.stringify(data).length} characters`);
-        
-        const response = await axios.put(`${CONFIG.JSONBIN_BASE_URL}/${binId}`, data, {
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': CONFIG.JSONBIN_API_KEY
-            },
-            timeout: 10000 // 10 second timeout
-        });
-        
-        if (response.status === 200) {
-            console.log(`✅ External cache saved successfully (bin: ${binId})`);
-            console.log(`📊 Response status: ${response.status}`);
-            return true;
-        } else {
-            console.log(`⚠️  Unexpected response status: ${response.status} (bin: ${binId})`);
-        }
-    } catch (error) {
-        console.error(`❌ Failed to save to external cache (bin: ${binId}):`, error.message);
-        if (error.response) {
-            console.error(`📊 Response status: ${error.response.status}`);
-            console.error(`📊 Response data:`, error.response.data);
-        }
-    }
-    return false;
-}
-
-async function loadFromExternalCache(binId) {
-    if (!CONFIG.EXTERNAL_CACHE_ENABLED || !CONFIG.JSONBIN_API_KEY || !binId) {
-        console.log(`⚠️  External cache load skipped - disabled or missing config (bin: ${binId})`);
-        return null;
-    }
-    
-    try {
-        console.log(`📥 Attempting to load from external cache (bin: ${binId})`);
-        
-        const response = await axios.get(`${CONFIG.JSONBIN_BASE_URL}/${binId}/latest`, {
-            headers: {
-                'X-Master-Key': CONFIG.JSONBIN_API_KEY
-            },
-            timeout: 10000 // 10 second timeout
-        });
-        
-        if (response.status === 200 && response.data.record) {
-            console.log(`✅ External cache loaded successfully (bin: ${binId})`);
-            console.log(`📊 Response status: ${response.status}`);
-            console.log(`📊 Data size: ${JSON.stringify(response.data.record).length} characters`);
-            
-            // Log cache structure for debugging
-            if (response.data.record.grandPrix) {
-                if (Array.isArray(response.data.record.grandPrix)) {
-                    console.log(`📊 Cache contains ${response.data.record.grandPrix.length} Grand Prix entries (array format)`);
-                } else {
-                    console.log(`📊 Cache contains ${Object.keys(response.data.record.grandPrix).length} Grand Prix entries (object format)`);
-                }
-            }
-            
-            return response.data.record;
-        } else {
-            console.log(`⚠️  Unexpected response format (bin: ${binId}):`, response.status, response.data);
-        }
-    } catch (error) {
-        if (error.response?.status === 404) {
-            console.log(`📝 External cache not found (bin: ${binId}) - will create new one`);
-        } else {
-            console.error(`❌ Failed to load from external cache (bin: ${binId}):`, error.message);
-            if (error.response) {
-                console.error(`📊 Response status: ${error.response.status}`);
-                console.error(`📊 Response data:`, error.response.data);
-            }
-        }
-    }
-    return null;
-}
-
-// Enhanced cache functions with external storage fallback
-async function saveCacheToFileWithExternal() {
-    try {
-        // Convert Maps to arrays for JSON serialization
-        const serializedGrandPrix = Array.from(cache.grandPrix.entries()).map(([key, gpData]) => {
-            const serializedGpData = { ...gpData };
-            
-            // Convert sessions Map to array for JSON serialization
-            if (gpData.sessions && gpData.sessions instanceof Map) {
-                serializedGpData.sessions = Array.from(gpData.sessions.entries());
-                console.log(`💾 Serializing ${gpData.name}: ${gpData.sessions.size} sessions to array`);
-            } else if (gpData.sessions && Array.isArray(gpData.sessions)) {
-                // Already serialized
-                serializedGpData.sessions = gpData.sessions;
-                console.log(`💾 ${gpData.name}: sessions already serialized (${gpData.sessions.length} entries)`);
-            } else {
-                console.log(`⚠️  ${gpData.name}: invalid sessions data during serialization`);
-                serializedGpData.sessions = [];
-            }
-            
-            return [key, serializedGpData];
-        });
-        
-        const cacheData = {
-            grandPrix: serializedGrandPrix,
-            lastUpdate: cache.lastUpdate,
-            processingProgress: cache.processingProgress
-        };
-        
-        fs.writeFileSync(CONFIG.CACHE_FILE, JSON.stringify(cacheData, null, 2));
-        console.log('💾 Cache saved to file');
-        
-        // Also save to external cache if enabled
-        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
-            await saveToExternalCache(CONFIG.JSONBIN_CACHE_BIN_ID, cacheData);
-        }
-    } catch (error) {
-        console.error('Error saving cache:', error);
-    }
-}
-
-async function loadCacheFromFileWithExternal() {
-    let cacheLoaded = false;
-    
-    // Try to load from local file first
-    try {
-            if (fs.existsSync(CONFIG.CACHE_FILE)) {
-                const cacheData = JSON.parse(fs.readFileSync(CONFIG.CACHE_FILE, 'utf8'));
-                console.log(`📁 Loading local cache data...`);
-                
-                // Handle both array format (from external cache) and Map format (from local cache)
-                if (Array.isArray(cacheData.grandPrix)) {
-                    cache.grandPrix = new Map(cacheData.grandPrix);
-                    console.log(`📊 Converted ${cacheData.grandPrix.length} Grand Prix entries from array format`);
-                } else {
-                    cache.grandPrix = new Map(cacheData.grandPrix || []);
-                    console.log(`📊 Converted Grand Prix entries from object format`);
-                }
-                
-                // Convert sessions arrays back to Maps for each Grand Prix
-                for (const [gpName, gpData] of cache.grandPrix) {
-                    console.log(`🔍 Processing local cache: ${gpName}`);
-                    console.log(`📊 Sessions type: ${typeof gpData.sessions}`);
-                    
-                    if (gpData.sessions && Array.isArray(gpData.sessions)) {
-                        console.log(`📊 Converting ${gpData.sessions.length} sessions from array to Map`);
-                        gpData.sessions = new Map(gpData.sessions);
-                    } else if (gpData.sessions && gpData.sessions instanceof Map) {
-                        console.log(`📊 Sessions already in Map format (${gpData.sessions.size} sessions)`);
-                    } else if (gpData.sessions && typeof gpData.sessions === 'object') {
-                        console.log(`📊 Converting sessions object to Map`);
-                        gpData.sessions = new Map(Object.entries(gpData.sessions));
-                    } else {
-                        console.log(`⚠️  No valid sessions data found for ${gpName}, initializing empty Map`);
-                        gpData.sessions = new Map();
-                    }
-                    
-                    console.log(`✅ Final sessions Map size: ${gpData.sessions.size}`);
-                }
-                
-                cache.lastUpdate = cacheData.lastUpdate || Date.now();
-                cache.processingProgress = cacheData.processingProgress || {};
-                cacheLoaded = true;
-                console.log(`📁 Local cache loaded: ${cache.grandPrix.size} Grand Prix`);
-            }
-    } catch (error) {
-        console.error('Error loading local cache:', error);
-    }
-    
-    // If local cache failed or is empty, try external cache
-    if (!cacheLoaded && CONFIG.EXTERNAL_CACHE_ENABLED) {
-        try {
-            const externalData = await loadFromExternalCache(CONFIG.JSONBIN_CACHE_BIN_ID);
-            if (externalData) {
-                console.log(`🔍 Processing external cache data...`);
-                console.log(`📊 External data keys:`, Object.keys(externalData));
-                
-                // Handle both array format (from external cache) and Map format (from local cache)
-                if (Array.isArray(externalData.grandPrix)) {
-                    console.log(`📊 Converting ${externalData.grandPrix.length} Grand Prix entries from array format`);
-                    cache.grandPrix = new Map(externalData.grandPrix);
-                } else {
-                    console.log(`📊 Converting Grand Prix entries from object format`);
-                    cache.grandPrix = new Map(externalData.grandPrix || []);
-                }
-                
-                console.log(`📊 Cache Map created with ${cache.grandPrix.size} entries`);
-                
-                // Convert sessions arrays back to Maps for each Grand Prix
-                for (const [gpName, gpData] of cache.grandPrix) {
-                    console.log(`🔍 Processing Grand Prix: ${gpName}`);
-                    console.log(`📊 GP data keys:`, Object.keys(gpData));
-                    console.log(`📊 Sessions type:`, typeof gpData.sessions);
-                    console.log(`📊 Sessions value:`, gpData.sessions);
-                    
-                    if (gpData.sessions && Array.isArray(gpData.sessions)) {
-                        console.log(`📊 Converting ${gpData.sessions.length} sessions from array to Map`);
-                        gpData.sessions = new Map(gpData.sessions);
-                    } else if (gpData.sessions && gpData.sessions instanceof Map) {
-                        console.log(`📊 Sessions already in Map format (${gpData.sessions.size} sessions)`);
-                    } else if (gpData.sessions && typeof gpData.sessions === 'object') {
-                        console.log(`📊 Converting sessions object to Map`);
-                        gpData.sessions = new Map(Object.entries(gpData.sessions));
-                    } else {
-                        console.log(`⚠️  No valid sessions data found for ${gpName}, initializing empty Map`);
-                        gpData.sessions = new Map();
-                    }
-                    
-                    console.log(`✅ Final sessions Map size: ${gpData.sessions.size}`);
-                }
-                
-                cache.lastUpdate = externalData.lastUpdate || Date.now();
-                cache.processingProgress = externalData.processingProgress || {};
-                cacheLoaded = true;
-                console.log(`✅ External cache loaded: ${cache.grandPrix.size} Grand Prix`);
-                
-                // Save to local file for faster future access
-                const cacheData = {
-                    grandPrix: Array.from(cache.grandPrix.entries()),
-                    lastUpdate: cache.lastUpdate,
-                    processingProgress: cache.processingProgress
-                };
-                fs.writeFileSync(CONFIG.CACHE_FILE, JSON.stringify(cacheData, null, 2));
-                console.log('💾 External cache data saved locally for faster access');
-            }
-        } catch (error) {
-            console.error('Error loading external cache:', error);
-        }
-    }
-    
-    return cacheLoaded;
-}
-
-async function savePostsCacheWithExternal(posts) {
-    try {
-        const postsData = {
-            posts: posts,
-            timestamp: Date.now()
-        };
-        fs.writeFileSync(CONFIG.POSTS_CACHE_FILE, JSON.stringify(postsData, null, 2));
-        console.log(`📝 Posts cache saved: ${posts.length} posts`);
-        
-        // Also save to external cache if enabled
-        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
-            await saveToExternalCache(CONFIG.JSONBIN_POSTS_BIN_ID, postsData);
-        }
-    } catch (error) {
-        console.error('Error saving posts cache:', error);
-    }
-}
-
-async function loadPostsCacheWithExternal() {
-    try {
-        // Try local file first
-        if (fs.existsSync(CONFIG.POSTS_CACHE_FILE)) {
-            const postsData = JSON.parse(fs.readFileSync(CONFIG.POSTS_CACHE_FILE, 'utf8'));
-            // Check if cache is not too old (24 hours)
-            const cacheAge = Date.now() - postsData.timestamp;
-            if (cacheAge < 24 * 60 * 60 * 1000) {
-                console.log(`📝 Posts cache loaded: ${postsData.posts.length} posts`);
-                return postsData.posts;
-            }
-        }
-        
-        // If local cache is old or missing, try external cache
-        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
-            const externalData = await loadFromExternalCache(CONFIG.JSONBIN_POSTS_BIN_ID);
-            if (externalData) {
-                const cacheAge = Date.now() - externalData.timestamp;
-                if (cacheAge < 24 * 60 * 60 * 1000) {
-                    console.log(`🌐 External posts cache loaded: ${externalData.posts.length} posts`);
-                    
-                    // Save to local file for faster future access
-                    fs.writeFileSync(CONFIG.POSTS_CACHE_FILE, JSON.stringify(externalData, null, 2));
-                    return externalData.posts;
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error loading posts cache:', error);
-    }
-    return null;
-}
-
-async function saveFullyProcessedPostsWithExternal(fullyProcessedPosts) {
-    try {
-        const processedData = {
-            posts: fullyProcessedPosts,
-            timestamp: Date.now()
-        };
-        fs.writeFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, JSON.stringify(processedData, null, 2));
-        console.log(`✅ Fully processed posts cache saved: ${fullyProcessedPosts.length} posts`);
-        
-        // Also save to external cache if enabled
-        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
-            await saveToExternalCache(CONFIG.JSONBIN_PROCESSED_BIN_ID, processedData);
-        }
-    } catch (error) {
-        console.error('Error saving fully processed posts cache:', error);
-    }
-}
-
-async function loadFullyProcessedPostsWithExternal() {
-    try {
-        // Try local file first
-        if (fs.existsSync(CONFIG.FULLY_PROCESSED_POSTS_FILE)) {
-            const processedData = JSON.parse(fs.readFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, 'utf8'));
-            console.log(`✅ Fully processed posts cache loaded: ${processedData.posts.length} posts`);
-            return processedData.posts;
-        }
-        
-        // If local cache is missing, try external cache
-        if (CONFIG.EXTERNAL_CACHE_ENABLED) {
-            const externalData = await loadFromExternalCache(CONFIG.JSONBIN_PROCESSED_BIN_ID);
-            if (externalData) {
-                console.log(`🌐 External fully processed posts cache loaded: ${externalData.posts.length} posts`);
-                
-                // Save to local file for faster future access
-                fs.writeFileSync(CONFIG.FULLY_PROCESSED_POSTS_FILE, JSON.stringify(externalData, null, 2));
-                return externalData.posts;
-            }
         }
     } catch (error) {
         console.error('Error loading fully processed posts cache:', error);
@@ -1268,7 +929,7 @@ async function fetchEgortechPosts() {
         console.log('🔍 Fetching egortech posts using Reddit API...');
         
         // Check cache first
-        const cachedPosts = await loadPostsCacheWithExternal();
+        const cachedPosts = loadPostsCache();
         if (cachedPosts) {
             console.log(`📝 Using cached posts: ${cachedPosts.length} posts`);
             return cachedPosts;
@@ -1383,7 +1044,7 @@ async function fetchEgortechPosts() {
         console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech using Reddit API`);
         
         // Save to cache
-        await savePostsCacheWithExternal(allPosts);
+        savePostsCache(allPosts);
         
         return allPosts;
     } catch (error) {
@@ -1561,7 +1222,7 @@ async function processEgortechData() {
         const processedData = new Map();
         
         // Load fully processed posts cache
-        let fullyProcessedPosts = await loadFullyProcessedPostsWithExternal();
+        let fullyProcessedPosts = loadFullyProcessedPosts();
         console.log(`✅ Loaded ${fullyProcessedPosts.length} fully processed posts from cache`);
         
         // Clean up old posts
@@ -1779,7 +1440,7 @@ async function processEgortechData() {
             // Save progress to cache file periodically
             if (currentGp % 3 === 0) {
                 cache.grandPrix = processedData;
-                await saveCacheToFileWithExternal();
+                saveCacheToFile();
             }
         }
         
@@ -1793,50 +1454,19 @@ async function processEgortechData() {
         
         // Preserve any existing Grand Prix that weren't found in current posts
         // (e.g., older races that are beyond the scroll range)
-        console.log(`🔍 Checking ${cache.grandPrix.size} existing Grand Prix for preservation...`);
-        
         for (const [gpKey, existingGpData] of cache.grandPrix) {
-            console.log(`🔍 Checking ${existingGpData.name} (key: ${gpKey})`);
-            console.log(`📊 Already processed: ${processedData.has(gpKey)}`);
-            console.log(`📊 Has sessions: ${!!existingGpData.sessions}`);
-            
-            if (existingGpData.sessions) {
-                if (existingGpData.sessions instanceof Map) {
-                    console.log(`📊 Sessions Map size: ${existingGpData.sessions.size}`);
-                } else if (Array.isArray(existingGpData.sessions)) {
-                    console.log(`📊 Sessions array length: ${existingGpData.sessions.length}`);
-                } else if (typeof existingGpData.sessions === 'object') {
-                    console.log(`📊 Sessions object keys:`, Object.keys(existingGpData.sessions));
-                } else {
-                    console.log(`📊 Sessions type: ${typeof existingGpData.sessions}, value: ${existingGpData.sessions}`);
-                }
-            } else {
-                console.log(`📊 No sessions data found for ${existingGpData.name}`);
-            }
-            
-            // Check if we should preserve this Grand Prix
-            const hasValidSessions = existingGpData.sessions && 
-                                   existingGpData.sessions instanceof Map && 
-                                   existingGpData.sessions.size > 0;
-            
-            if (!processedData.has(gpKey) && hasValidSessions) {
+            if (!processedData.has(gpKey) && existingGpData.sessions && existingGpData.sessions.size > 0) {
                 processedData.set(gpKey, existingGpData);
                 preservedGpCount++;
-                console.log(`✅ Preserved older Grand Prix from cache: ${existingGpData.name} (${existingGpData.sessions.size} sessions)`);
-            } else {
-                const reason = processedData.has(gpKey) ? 'already processed' : 
-                             !existingGpData.sessions ? 'no sessions data' :
-                             !(existingGpData.sessions instanceof Map) ? 'sessions not a Map' :
-                             existingGpData.sessions.size === 0 ? 'empty sessions' : 'unknown reason';
-                console.log(`⚠️  Skipping ${existingGpData.name} - ${reason}`);
+                console.log(`📁 Preserved older Grand Prix from cache: ${existingGpData.name} (${existingGpData.sessions.size} sessions)`);
             }
         }
         
         console.log(`💾 Cache updated with ${processedData.size} Grand Prix`);
-        await saveCacheToFileWithExternal();
+        saveCacheToFile();
         
         // Save fully processed posts cache
-        await saveFullyProcessedPostsWithExternal(fullyProcessedPosts);
+        saveFullyProcessedPosts(fullyProcessedPosts);
         
         // Log caching benefits
         console.log(`\n=== CACHING BENEFITS ===`);
@@ -2069,7 +1699,7 @@ builder.defineMetaHandler(({ type, id }) => {
 
 // Stream Handler - Real Debrid Only (Now just returns pre-converted streams!)
 builder.defineStreamHandler(async ({ type, id }) => {
-    if (type !== 'series' || !id || !id.startsWith('stremula1:')) {
+    if (type !== 'series' || !id.startsWith('stremula1:')) {
         return Promise.resolve({ streams: [] });
     }
     
@@ -2274,7 +1904,7 @@ function setupCommandInterface() {
             const grandPrixName = parts.slice(2).join(' ');
             
             try {
-                let fullyProcessedPosts = await loadFullyProcessedPostsWithExternal();
+                let fullyProcessedPosts = loadFullyProcessedPosts();
                 
                 // Check if post already exists
                 const existingIndex = fullyProcessedPosts.findIndex(p => p.id === postId);
@@ -2294,7 +1924,7 @@ function setupCommandInterface() {
                 ];
                 
                 addToFullyProcessedPosts(postId, grandPrixName, mockSessions, fullyProcessedPosts);
-                await saveFullyProcessedPostsWithExternal(fullyProcessedPosts);
+                saveFullyProcessedPosts(fullyProcessedPosts);
                 
                 console.log(`✅ Successfully added post ${postId} (${grandPrixName}) to fully processed list`);
                 console.log('🔄 The addon will skip this post in future processing runs');
@@ -2316,7 +1946,7 @@ function setupCommandInterface() {
             const postId = parts[1];
             
             try {
-                let fullyProcessedPosts = await loadFullyProcessedPostsWithExternal();
+                let fullyProcessedPosts = loadFullyProcessedPosts();
                 const originalLength = fullyProcessedPosts.length;
                 
                 fullyProcessedPosts = fullyProcessedPosts.filter(p => p.id !== postId);
@@ -2326,7 +1956,7 @@ function setupCommandInterface() {
                     return;
                 }
                 
-                await saveFullyProcessedPostsWithExternal(fullyProcessedPosts);
+                saveFullyProcessedPosts(fullyProcessedPosts);
                 console.log(`✅ Successfully removed post ${postId} from fully processed list`);
                 console.log('🔄 The addon will process this post again in future runs');
                 
@@ -2388,44 +2018,9 @@ async function startServer() {
         console.log('\n⚠️  Without Reddit API credentials, the addon cannot fetch posts!');
     }
     
-    // External Cache Configuration Check
-    console.log('\n🌐 External Cache Configuration Check:');
-    if (CONFIG.EXTERNAL_CACHE_ENABLED) {
-        console.log('✅ External cache enabled');
-        if (CONFIG.JSONBIN_API_KEY) {
-            console.log(`   API Key: ${CONFIG.JSONBIN_API_KEY.substring(0, 8)}...`);
-        } else {
-            console.log('❌ JSONBIN_API_KEY not configured');
-        }
-        if (CONFIG.JSONBIN_CACHE_BIN_ID) {
-            console.log(`   Cache Bin ID: ${CONFIG.JSONBIN_CACHE_BIN_ID}`);
-        } else {
-            console.log('❌ JSONBIN_CACHE_BIN_ID not configured');
-        }
-        if (CONFIG.JSONBIN_POSTS_BIN_ID) {
-            console.log(`   Posts Bin ID: ${CONFIG.JSONBIN_POSTS_BIN_ID}`);
-        } else {
-            console.log('❌ JSONBIN_POSTS_BIN_ID not configured');
-        }
-        if (CONFIG.JSONBIN_PROCESSED_BIN_ID) {
-            console.log(`   Processed Bin ID: ${CONFIG.JSONBIN_PROCESSED_BIN_ID}`);
-        } else {
-            console.log('❌ JSONBIN_PROCESSED_BIN_ID not configured');
-        }
-    } else {
-        console.log('⚠️  External cache disabled - using local files only');
-        console.log('📋 To enable external cache, set environment variables:');
-        console.log('   - EXTERNAL_CACHE_ENABLED=true');
-        console.log('   - JSONBIN_API_KEY=your_api_key');
-        console.log('   - JSONBIN_CACHE_BIN_ID=your_cache_bin_id');
-        console.log('   - JSONBIN_POSTS_BIN_ID=your_posts_bin_id');
-        console.log('   - JSONBIN_PROCESSED_BIN_ID=your_processed_bin_id');
-        console.log('\n🔗 Sign up at: https://jsonbin.io/');
-    }
-    
     // Load existing cache for faster processing
     console.log('📁 Loading existing cache for faster processing...');
-    const cacheLoaded = await loadCacheFromFileWithExternal();
+    const cacheLoaded = loadCacheFromFile();
     
     if (cacheLoaded && cache.grandPrix.size > 0) {
         console.log(`📁 Found existing cache with ${cache.grandPrix.size} Grand Prix`);
