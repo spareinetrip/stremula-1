@@ -1596,6 +1596,8 @@ builder.defineCatalogHandler(({ type, id, extra }) => {
             return b.round - a.round;
         });
     
+    console.log(`📋 Catalog: Processing ${sortedGps.length} Grand Prix from cache`);
+    
     for (const gp of sortedGps) {
         // Ensure sessions is a Map
         if (!gp.sessions || typeof gp.sessions.values !== 'function') {
@@ -1604,6 +1606,8 @@ builder.defineCatalogHandler(({ type, id, extra }) => {
         }
         
         const sessionCount = gp.sessions.size;
+        console.log(`📋 Including ${gp.name} (Round ${gp.round}) with ${sessionCount} sessions`);
+        
         const latestSession = Array.from(gp.sessions.values())
             .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0];
         
@@ -1624,6 +1628,7 @@ builder.defineCatalogHandler(({ type, id, extra }) => {
         });
     }
     
+    console.log(`📋 Catalog returning ${metas.length} Grand Prix`);
     return Promise.resolve({ metas });
 });
 
