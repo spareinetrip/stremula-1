@@ -1606,11 +1606,10 @@ builder.defineCatalogHandler(({ type, id, extra }) => {
         }
         
         const sessionCount = gp.sessions.size;
-        console.log(`📋 Including ${gp.name} (Round ${gp.round}) with ${sessionCount} sessions`);
+        const sessionsWithStreams = Array.from(gp.sessions.values()).filter(s => s.streams && s.streams.length > 0).length;
+        console.log(`📋 Including ${gp.name} (Round ${gp.round}) with ${sessionCount} sessions (${sessionsWithStreams} with streams)`);
         
-        const latestSession = Array.from(gp.sessions.values())
-            .sort((a, b) => (b.updated || 0) - (a.updated || 0))[0];
-        
+        // Include ALL Grand Prix regardless of completion status
         metas.push({
             id: `stremula1:${gp.name.replace(/\s+/g, '-').toLowerCase()}`,
             type: 'series',
@@ -1654,6 +1653,7 @@ builder.defineMetaHandler(({ type, id }) => {
         .find(gp => gp.name.replace(/\s+/g, '-').toLowerCase() === gpName);
     
     if (!gpData) {
+        console.log(`⚠️  Grand Prix not found: ${gpName}`);
         return Promise.resolve({ meta: null });
     }
     
@@ -1663,49 +1663,31 @@ builder.defineMetaHandler(({ type, id }) => {
         return Promise.resolve({ meta: null });
     }
     
+    console.log(`🎬 Meta handler for ${gpData.name}: ${gpData.sessions.size} sessions available`);
+    
     const videos = [];
-    // Determine weekend format based on available sessions
     const sessionKeys = Array.from(gpData.sessions.keys());
-    const hasSprintQualifying = sessionKeys.some(key => 
-        key.toLowerCase().includes('sprint qualifying')
-    );
-    const hasSprint = sessionKeys.some(key => 
-        key.toLowerCase().includes('sprint') && !key.toLowerCase().includes('qualifying')
-    );
-    const hasPractice2 = sessionKeys.some(key => 
-        key.toLowerCase().includes('practice two') || key.toLowerCase().includes('practice 2')
-    );
-    const hasPractice3 = sessionKeys.some(key => 
-        key.toLowerCase().includes('practice three') || key.toLowerCase().includes('practice 3')
-    );
     
-    // Define the allowed sessions in their weekend order based on format
-    let allowedSessionOrder;
-    if (hasSprintQualifying && hasSprint) {
-        // Sprint weekend format
-        allowedSessionOrder = [
-            'Free Practice One',
-            'Sprint Qualifying',
-            'Sprint',
-            'Qualifying',
-            'Race'
-        ];
-    } else {
-        // Regular weekend format
-        allowedSessionOrder = [
-            'Free Practice One',
-            'Free Practice Two',
-            'Free Practice Three',
-            'Qualifying',
-            'Race'
-        ];
-    }
+    // Show ALL available sessions with streams, regardless of weekend completion
+    // Sort sessions by their typical weekend order
+    const sessionOrder = [
+        'Free Practice One',
+        'Free Practice Two', 
+        'Free Practice Three',
+        'Sprint Qualifying',
+        'Sprint',
+        'Qualifying',
+        'Race'
+    ];
     
-    // Add only the allowed sessions in their weekend order
     let episodeNumber = 1;
-    for (const sessionType of allowedSessionOrder) {
-        // Try to find the session with exact match or similar variations
+    
+    // First, add sessions in their typical weekend order if they exist
+    for (const sessionType of sessionOrder) {
         let sessionData = null;
+        let sessionKey = null;
+        
+        // Find matching session
         for (const [key, value] of gpData.sessions) {
             const keyLower = key.toLowerCase();
             const sessionTypeLower = sessionType.toLowerCase();
@@ -1714,34 +1696,42 @@ builder.defineMetaHandler(({ type, id }) => {
             if (sessionTypeLower.includes('practice one') && 
                 (keyLower.includes('practice one') || keyLower.includes('practice.one') || keyLower.includes('fp1'))) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             } else if (sessionTypeLower.includes('practice two') && 
                 (keyLower.includes('practice two') || keyLower.includes('practice.two') || keyLower.includes('fp2'))) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             } else if (sessionTypeLower.includes('practice three') && 
                 (keyLower.includes('practice three') || keyLower.includes('practice.three') || keyLower.includes('fp3'))) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             } else if (sessionTypeLower.includes('sprint qualifying') && 
                 (keyLower.includes('sprint qualifying') || keyLower.includes('sprint quali'))) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             } else if (sessionTypeLower === 'sprint' && 
                 keyLower.includes('sprint') && !keyLower.includes('qualifying')) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             } else if (sessionTypeLower === 'qualifying' && 
                 (keyLower.includes('qualifying') || keyLower.includes('quali')) && !keyLower.includes('sprint')) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             } else if (sessionTypeLower === 'race' && keyLower.includes('race')) {
                 sessionData = value;
+                sessionKey = key;
                 break;
             }
         }
         
-        if (sessionData && sessionData.streams.length > 0) {
+        // Add session if it has streams
+        if (sessionData && sessionData.streams && sessionData.streams.length > 0) {
             videos.push({
                 id: `stremula1:${gpName}:${sessionType}`,
                 title: sessionType,
@@ -1751,8 +1741,30 @@ builder.defineMetaHandler(({ type, id }) => {
                 thumbnail: getThumbnailForSession(sessionType),
                 overview: `Sky Sports F1 presents the ${gpData.name}: ${sessionType}, with Martin Brundle and David Croft analysing the action`
             });
+            console.log(`🎬 Added ${sessionType} (${sessionData.streams.length} streams)`);
         }
     }
+    
+    // If no videos were added from ordered sessions, add any available sessions
+    if (videos.length === 0) {
+        console.log(`⚠️  No ordered sessions found, adding any available sessions`);
+        for (const [sessionKey, sessionData] of gpData.sessions) {
+            if (sessionData.streams && sessionData.streams.length > 0) {
+                videos.push({
+                    id: `stremula1:${gpName}:${sessionKey}`,
+                    title: sessionKey,
+                    season: 1,
+                    episode: episodeNumber++,
+                    released: new Date(sessionData.updated).toISOString(),
+                    thumbnail: getThumbnailForSession(sessionKey),
+                    overview: `Sky Sports F1 presents the ${gpData.name}: ${sessionKey}, with Martin Brundle and David Croft analysing the action`
+                });
+                console.log(`🎬 Added ${sessionKey} (${sessionData.streams.length} streams)`);
+            }
+        }
+    }
+    
+    console.log(`🎬 Meta handler returning ${videos.length} episodes for ${gpData.name}`);
     
     const meta = {
         id: id,
