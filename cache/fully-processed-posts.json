@@ -1215,7 +1215,159 @@
       ],
       "processedAt": 1757884327792,
       "sessionCount": 5
+    },
+    {
+      "id": "1o8h25z",
+      "grandPrixName": "United States Grand Prix",
+      "sessions": [
+        {
+          "name": "Free Practice One",
+          "fullMatch": "Free Practice One (17.10.2025) (1:47:29)",
+          "date": "17.10.2025",
+          "duration": "1:47:29"
+        },
+        {
+          "name": "Sprint Qualifying",
+          "fullMatch": "Sprint Qualifying (17.10.2025) (1:45:11)",
+          "date": "17.10.2025",
+          "duration": "1:45:11"
+        },
+        {
+          "name": "Sprint",
+          "fullMatch": "Sprint (18.10.2025) (2:24:55)",
+          "date": "18.10.2025",
+          "duration": "2:24:55"
+        },
+        {
+          "name": "Qualifying",
+          "fullMatch": "Qualifying (18.10.2025) (2:43:10)",
+          "date": "18.10.2025",
+          "duration": "2:43:10"
+        },
+        {
+          "name": "Race",
+          "fullMatch": "Race (19.10.2025) (4:03:29)",
+          "date": "19.10.2025",
+          "duration": "4:03:29"
+        }
+      ],
+      "processedAt": 1760919156118,
+      "sessionCount": 5
+    },
+    {
+      "id": "1o8haxo",
+      "grandPrixName": "United States Grand Prix",
+      "sessions": [
+        {
+          "name": "Free Practice One",
+          "fullMatch": "Free Practice One (17.10.2025) (1:47:26)",
+          "date": "17.10.2025",
+          "duration": "1:47:26"
+        },
+        {
+          "name": "Sprint Qualifying",
+          "fullMatch": "Sprint Qualifying (17.10.2025) (1:45:54)",
+          "date": "17.10.2025",
+          "duration": "1:45:54"
+        },
+        {
+          "name": "Sprint",
+          "fullMatch": "Sprint (18.10.2025) (2:24:54)",
+          "date": "18.10.2025",
+          "duration": "2:24:54"
+        },
+        {
+          "name": "Qualifying",
+          "fullMatch": "Qualifying (18.10.2025) (2:43:08)",
+          "date": "18.10.2025",
+          "duration": "2:43:08"
+        },
+        {
+          "name": "Race",
+          "fullMatch": "Race (19.10.2025) (4:03:20)",
+          "date": "19.10.2025",
+          "duration": "4:03:20"
+        }
+      ],
+      "processedAt": 1760919156118,
+      "sessionCount": 5
+    },
+    {
+      "id": "1nwasc1",
+      "grandPrixName": "Singapore Grand Prix",
+      "sessions": [
+        {
+          "name": "Free Practice One",
+          "fullMatch": "Free Practice One (03.10.2025) (1:40:04)",
+          "date": "03.10.2025",
+          "duration": "1:40:04"
+        },
+        {
+          "name": "Free Practice Two",
+          "fullMatch": "Free Practice Two (03.10.2025) (1:16:07)",
+          "date": "03.10.2025",
+          "duration": "1:16:07"
+        },
+        {
+          "name": "Free Practice Three",
+          "fullMatch": "Free Practice Three (04.10.2025) (1:22:39)",
+          "date": "04.10.2025",
+          "duration": "1:22:39"
+        },
+        {
+          "name": "Qualifying",
+          "fullMatch": "Qualifying (04.10.2025) (2:53:11)",
+          "date": "04.10.2025",
+          "duration": "2:53:11"
+        },
+        {
+          "name": "Race",
+          "fullMatch": "Race (05.10.2025) (4:29:39)",
+          "date": "05.10.2025",
+          "duration": "4:29:39"
+        }
+      ],
+      "processedAt": 1760919178438,
+      "sessionCount": 5
+    },
+    {
+      "id": "1nwbznk",
+      "grandPrixName": "Singapore Grand Prix",
+      "sessions": [
+        {
+          "name": "Free Practice One",
+          "fullMatch": "Free Practice One (03.10.2025) (1:40:04)",
+          "date": "03.10.2025",
+          "duration": "1:40:04"
+        },
+        {
+          "name": "Free Practice Two",
+          "fullMatch": "Free Practice Two (03.10.2025) (1:16:36)",
+          "date": "03.10.2025",
+          "duration": "1:16:36"
+        },
+        {
+          "name": "Free Practice Three",
+          "fullMatch": "Free Practice Three (04.10.2025) (1:22:37)",
+          "date": "04.10.2025",
+          "duration": "1:22:37"
+        },
+        {
+          "name": "Qualifying",
+          "fullMatch": "Qualifying (04.10.2025) (2:53:11)",
+          "date": "04.10.2025",
+          "duration": "2:53:11"
+        },
+        {
+          "name": "Race",
+          "fullMatch": "Race (05.10.2025) (4:29:17)",
+          "date": "05.10.2025",
+          "duration": "4:29:17"
+        }
+      ],
+      "processedAt": 1760919178438,
+      "sessionCount": 5
     }
   ],
-  "timestamp": 1757884423161
+  "timestamp": 1760919178448
 }
