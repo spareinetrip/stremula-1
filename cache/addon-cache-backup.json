@@ -31,7 +31,36 @@
             "Free Practice One",
             {
               "title": "Practice 1",
-              "streams": [],
+              "streams": [
+                {
+                  "url": "https://40-4.download.real-debrid.com/d/VS5NDWBVF5C42/03.F1.2025.R19.United.States.Grand.Prix.Free.Practice.One.SkyF1HD.1080P.mkv",
+                  "quality": "1080p",
+                  "source": "Sky F1",
+                  "filename": "03.F1.2025.R19.United.States.Grand.Prix.Free.Practice.One.SkyF1HD.1080P.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8h25z/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Free Practice One",
+                  "sessionDetails": {
+                    "name": "Free Practice One",
+                    "fullMatch": "Free Practice One (17.10.2025) (1:47:29)",
+                    "date": "17.10.2025",
+                    "duration": "1:47:29"
+                  }
+                },
+                {
+                  "url": "https://23-4.download.real-debrid.com/d/IWYOTX247D37S/03.F1.2025.R19.United.States.Grand.Prix.Free.Practice.One.Sky.Sports.F1.UHD.2160p.mkv",
+                  "quality": "4K",
+                  "source": "Sky F1",
+                  "filename": "03.F1.2025.R19.United.States.Grand.Prix.Free.Practice.One.Sky.Sports.F1.UHD.2160p.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8haxo/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Free Practice One",
+                  "sessionDetails": {
+                    "name": "Free Practice One",
+                    "fullMatch": "Free Practice One (17.10.2025) (1:47:29)",
+                    "date": "17.10.2025",
+                    "duration": "1:47:29"
+                  }
+                }
+              ],
               "updated": 1760652000000,
               "details": {
                 "name": "Free Practice One",
@@ -45,7 +74,36 @@
             "Sprint Qualifying",
             {
               "title": "Sprint Qualifying",
-              "streams": [],
+              "streams": [
+                {
+                  "url": "https://21-4.download.real-debrid.com/d/LRFTN6YPXZHXG/05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.SkyF1HD.1080P.mkv",
+                  "quality": "1080p",
+                  "source": "Sky F1",
+                  "filename": "05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.SkyF1HD.1080P.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8h25z/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Sprint Qualifying",
+                  "sessionDetails": {
+                    "name": "Sprint Qualifying",
+                    "fullMatch": "Sprint Qualifying (17.10.2025) (1:45:11)",
+                    "date": "17.10.2025",
+                    "duration": "1:45:11"
+                  }
+                },
+                {
+                  "url": "https://23-4.download.real-debrid.com/d/TIRGLMGMHCZB6/05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
+                  "quality": "4K",
+                  "source": "Sky F1",
+                  "filename": "05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8haxo/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Sprint Qualifying",
+                  "sessionDetails": {
+                    "name": "Sprint Qualifying",
+                    "fullMatch": "Sprint Qualifying (17.10.2025) (1:45:11)",
+                    "date": "17.10.2025",
+                    "duration": "1:45:11"
+                  }
+                }
+              ],
               "updated": 1760652000000,
               "details": {
                 "name": "Sprint Qualifying",
@@ -59,7 +117,36 @@
             "Sprint",
             {
               "title": "Sprint",
-              "streams": [],
+              "streams": [
+                {
+                  "url": "https://21-4.download.real-debrid.com/d/3O3HCBN7ESMG6/06.F1.2025.R19.United.States.Grand.Prix.Sprint.SkyF1HD.1080P.mkv",
+                  "quality": "1080p",
+                  "source": "Sky F1",
+                  "filename": "06.F1.2025.R19.United.States.Grand.Prix.Sprint.SkyF1HD.1080P.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8h25z/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Sprint",
+                  "sessionDetails": {
+                    "name": "Sprint",
+                    "fullMatch": "Sprint (18.10.2025) (2:24:55)",
+                    "date": "18.10.2025",
+                    "duration": "2:24:55"
+                  }
+                },
+                {
+                  "url": "https://23-4.download.real-debrid.com/d/O5LMXVWI5SCCQ/06.F1.2025.R19.United.States.Grand.Prix.Sprint.Sky.Sports.F1.UHD.2160p.mkv",
+                  "quality": "4K",
+                  "source": "Sky F1",
+                  "filename": "06.F1.2025.R19.United.States.Grand.Prix.Sprint.Sky.Sports.F1.UHD.2160p.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8haxo/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Sprint",
+                  "sessionDetails": {
+                    "name": "Sprint",
+                    "fullMatch": "Sprint (18.10.2025) (2:24:55)",
+                    "date": "18.10.2025",
+                    "duration": "2:24:55"
+                  }
+                }
+              ],
               "updated": 1760738400000,
               "details": {
                 "name": "Sprint",
@@ -73,7 +160,36 @@
             "Qualifying",
             {
               "title": "Qualifying",
-              "streams": [],
+              "streams": [
+                {
+                  "url": "https://21-4.download.real-debrid.com/d/LRFTN6YPXZHXG/05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.SkyF1HD.1080P.mkv",
+                  "quality": "1080p",
+                  "source": "Sky F1",
+                  "filename": "05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.SkyF1HD.1080P.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8h25z/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Qualifying",
+                  "sessionDetails": {
+                    "name": "Qualifying",
+                    "fullMatch": "Qualifying (18.10.2025) (2:43:10)",
+                    "date": "18.10.2025",
+                    "duration": "2:43:10"
+                  }
+                },
+                {
+                  "url": "https://23-4.download.real-debrid.com/d/TIRGLMGMHCZB6/05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
+                  "quality": "4K",
+                  "source": "Sky F1",
+                  "filename": "05.F1.2025.R19.United.States.Grand.Prix.Sprint.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8haxo/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Qualifying",
+                  "sessionDetails": {
+                    "name": "Qualifying",
+                    "fullMatch": "Qualifying (18.10.2025) (2:43:10)",
+                    "date": "18.10.2025",
+                    "duration": "2:43:10"
+                  }
+                }
+              ],
               "updated": 1760738400000,
               "details": {
                 "name": "Qualifying",
@@ -87,7 +203,36 @@
             "Race",
             {
               "title": "Race",
-              "streams": [],
+              "streams": [
+                {
+                  "url": "https://21-4.download.real-debrid.com/d/4T6UDEM5XFQWO/10.F1.2025.R19.United.States.Grand.Prix.Race.SkyF1HD.1080P.mkv",
+                  "quality": "1080p",
+                  "source": "Sky F1",
+                  "filename": "10.F1.2025.R19.United.States.Grand.Prix.Race.SkyF1HD.1080P.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8h25z/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Race",
+                  "sessionDetails": {
+                    "name": "Race",
+                    "fullMatch": "Race (19.10.2025) (4:03:29)",
+                    "date": "19.10.2025",
+                    "duration": "4:03:29"
+                  }
+                },
+                {
+                  "url": "https://23-4.download.real-debrid.com/d/SUM25TUYH3FX6/10.F1.2025.R19.United.States.Grand.Prix.Race.Sky.Sports.F1.UHD.2160p.mkv",
+                  "quality": "4K",
+                  "source": "Sky F1",
+                  "filename": "10.F1.2025.R19.United.States.Grand.Prix.Race.Sky.Sports.F1.UHD.2160p.mkv",
+                  "postUrl": "https://reddit.com/r/MotorsportsReplays/comments/1o8haxo/formula_1_2025_r19_united_states_grand_prix/",
+                  "sessionName": "Race",
+                  "sessionDetails": {
+                    "name": "Race",
+                    "fullMatch": "Race (19.10.2025) (4:03:29)",
+                    "date": "19.10.2025",
+                    "duration": "4:03:29"
+                  }
+                }
+              ],
               "updated": 1760824800000,
               "details": {
                 "name": "Race",
@@ -133,7 +278,7 @@
               "title": "Practice 1",
               "streams": [
                 {
-                  "url": "https://41-4.download.real-debrid.com/d/GHKGWPPNEI2NC/03.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.One.SkyF1HD.1080P.mkv",
+                  "url": "https://43-4.download.real-debrid.com/d/4F25SOHK5GCAC/03.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.One.SkyF1HD.1080P.mkv",
                   "quality": "1080p",
                   "source": "Sky F1",
                   "filename": "03.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.One.SkyF1HD.1080P.mkv",
@@ -147,7 +292,7 @@
                   }
                 },
                 {
-                  "url": "https://40-4.download.real-debrid.com/d/LLPJWI5V556FO/03.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.One.Sky.Sports.F1.UHD.2160p.mkv",
+                  "url": "https://45-4.download.real-debrid.com/d/Y6JP76M6QYDDQ/03.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.One.Sky.Sports.F1.UHD.2160p.mkv",
                   "quality": "4K",
                   "source": "Sky F1",
                   "filename": "03.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.One.Sky.Sports.F1.UHD.2160p.mkv",
@@ -176,7 +321,7 @@
               "title": "Practice 2",
               "streams": [
                 {
-                  "url": "https://41-4.download.real-debrid.com/d/KWOZW63IV5H6Y/05.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Two.SkyF1HD.1080P.mkv",
+                  "url": "https://43-4.download.real-debrid.com/d/V5VWPZY6BD75I/05.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Two.SkyF1HD.1080P.mkv",
                   "quality": "1080p",
                   "source": "Sky F1",
                   "filename": "05.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Two.SkyF1HD.1080P.mkv",
@@ -190,7 +335,7 @@
                   }
                 },
                 {
-                  "url": "https://21-4.download.real-debrid.com/d/7ESZWHBNEQ5Q6/05.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Two.Sky.Sports.F1.UHD.2160p.mkv",
+                  "url": "https://45-4.download.real-debrid.com/d/7TWIUYIPR57JK/05.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Two.Sky.Sports.F1.UHD.2160p.mkv",
                   "quality": "4K",
                   "source": "Sky F1",
                   "filename": "05.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Two.Sky.Sports.F1.UHD.2160p.mkv",
@@ -219,7 +364,7 @@
               "title": "Practice 3",
               "streams": [
                 {
-                  "url": "https://41-4.download.real-debrid.com/d/7OLMVCDBYGN4C/07.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Three.SkyF1HD.1080P.mkv",
+                  "url": "https://43-4.download.real-debrid.com/d/CX7PI5X3TJHRK/07.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Three.SkyF1HD.1080P.mkv",
                   "quality": "1080p",
                   "source": "Sky F1",
                   "filename": "07.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Three.SkyF1HD.1080P.mkv",
@@ -233,7 +378,7 @@
                   }
                 },
                 {
-                  "url": "https://21-4.download.real-debrid.com/d/HUDAHMQQ6U4WQ/07.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Three.Sky.Sports.F1.UHD.2160p.mkv",
+                  "url": "https://45-4.download.real-debrid.com/d/Y666X3CM5X4OI/07.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Three.Sky.Sports.F1.UHD.2160p.mkv",
                   "quality": "4K",
                   "source": "Sky F1",
                   "filename": "07.F1.2025.R18.Singapore.Grand.Prix.Free.Practice.Three.Sky.Sports.F1.UHD.2160p.mkv",
@@ -262,7 +407,7 @@
               "title": "Qualifying",
               "streams": [
                 {
-                  "url": "https://41-4.download.real-debrid.com/d/NPAXYPWNJIUCK/08.F1.2025.R18.Singapore.Grand.Prix.Qualifying.SkyF1HD.1080P.mkv",
+                  "url": "https://43-4.download.real-debrid.com/d/OKULNKHZLHDHK/08.F1.2025.R18.Singapore.Grand.Prix.Qualifying.SkyF1HD.1080P.mkv",
                   "quality": "1080p",
                   "source": "Sky F1",
                   "filename": "08.F1.2025.R18.Singapore.Grand.Prix.Qualifying.SkyF1HD.1080P.mkv",
@@ -276,7 +421,7 @@
                   }
                 },
                 {
-                  "url": "https://21-4.download.real-debrid.com/d/ZEBWT3E6NRWE2/08.F1.2025.R18.Singapore.Grand.Prix.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
+                  "url": "https://45-4.download.real-debrid.com/d/SDY6QRYQ46AJ4/08.F1.2025.R18.Singapore.Grand.Prix.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
                   "quality": "4K",
                   "source": "Sky F1",
                   "filename": "08.F1.2025.R18.Singapore.Grand.Prix.Qualifying.Sky.Sports.F1.UHD.2160p.mkv",
@@ -305,7 +450,7 @@
               "title": "Race",
               "streams": [
                 {
-                  "url": "https://41-4.download.real-debrid.com/d/SCH2ZP2WSXYJE/10.F1.2025.R18.Singapore.Grand.Prix.Race.SkyF1HD.1080P.mkv",
+                  "url": "https://43-4.download.real-debrid.com/d/SGGTSV3RHBUMI/10.F1.2025.R18.Singapore.Grand.Prix.Race.SkyF1HD.1080P.mkv",
                   "quality": "1080p",
                   "source": "Sky F1",
                   "filename": "10.F1.2025.R18.Singapore.Grand.Prix.Race.SkyF1HD.1080P.mkv",
@@ -319,7 +464,7 @@
                   }
                 },
                 {
-                  "url": "https://21-4.download.real-debrid.com/d/ZEHH4FN4ZZZ5K/10.F1.2025.R18.Singapore.Grand.Prix.Race.Sky.Sports.F1.UHD.2160p.mkv",
+                  "url": "https://45-4.download.real-debrid.com/d/NDO4UVTV4FVN2/10.F1.2025.R18.Singapore.Grand.Prix.Race.Sky.Sports.F1.UHD.2160p.mkv",
                   "quality": "4K",
                   "source": "Sky F1",
                   "filename": "10.F1.2025.R18.Singapore.Grand.Prix.Race.Sky.Sports.F1.UHD.2160p.mkv",
@@ -4484,7 +4629,7 @@
       }
     ]
   ],
-  "lastUpdate": 1760919639707,
+  "lastUpdate": 1760951288737,
   "processingProgress": {
     "current": 2,
     "total": 2,
