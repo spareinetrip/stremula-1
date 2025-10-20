@@ -817,6 +817,95 @@ function extractSessionsFromContent(html) {
 }
 
 // Real-Debrid API functions
+async function checkExistingTorrent(magnetLink) {
+    try {
+        // Get list of existing torrents
+        const response = await axios.get(`${CONFIG.REALDEBRID_API_URL}/torrents`, {
+            headers: {
+                'Authorization': `Bearer ${realdebridConfig.apiKey}`
+            }
+        });
+        
+        const torrents = response.data;
+        
+        // Check if this magnet link already exists
+        for (const torrent of torrents) {
+            if (torrent.magnet === magnetLink) {
+                console.log(`✅ Found existing torrent: ${torrent.id} (status: ${torrent.status})`);
+                return torrent;
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Error checking existing torrents:', error.response?.data || error.message);
+        return null;
+    }
+}
+
+async function getStreamingLinksFromTorrent(torrentInfo) {
+    try {
+        // Get download links from torrent info
+        if (!torrentInfo.links || torrentInfo.links.length === 0) {
+            console.log('❌ No download links found in torrent info');
+            return null;
+        }
+        
+        console.log(`📁 Found ${torrentInfo.links.length} download links`);
+        
+        // Convert each download link to streaming link using unrestrict API
+        const streamingLinks = [];
+        
+        for (const downloadLink of torrentInfo.links) {
+            try {
+                const unrestrictResponse = await axios.post(`${CONFIG.REALDEBRID_API_URL}/unrestrict/link`, {
+                    link: downloadLink
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${realdebridConfig.apiKey}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+                
+                const unrestrictData = unrestrictResponse.data;
+                
+                // Create streaming link URL
+                if (unrestrictData.download) {
+                    // Validate that it's a direct file URL
+                    const streamingUrl = unrestrictData.download;
+                    
+                    // Check if it's a video file
+                    const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'];
+                    const isVideoFile = videoExtensions.some(ext => 
+                        streamingUrl.toLowerCase().includes(ext)
+                    );
+                    
+                    if (isVideoFile) {
+                        streamingLinks.push({
+                            url: streamingUrl,
+                            filename: unrestrictData.filename,
+                            size: unrestrictData.filesize,
+                            downloadUrl: unrestrictData.download
+                        });
+                        console.log(`🔗 Converted to streaming link: ${streamingUrl}`);
+                    } else {
+                        console.log(`⏭️  Skipping non-video file: ${unrestrictData.filename}`);
+                    }
+                } else {
+                    console.error('No download URL returned from unrestrict API');
+                }
+            } catch (error) {
+                console.error('Error converting link to streaming:', error.response?.data || error.message);
+            }
+        }
+        
+        return streamingLinks;
+    } catch (error) {
+        console.error('Error getting streaming links from torrent:', error);
+        return null;
+    }
+}
+
 async function convertMagnetToRealDebridStreamingLinks(magnetLink) {
     if (!realdebridConfig.enabled || !realdebridConfig.apiKey) {
         console.log('⚠️  Real-Debrid not configured');
@@ -826,28 +915,43 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink) {
     try {
         console.log('🔄 Converting magnet to Real-Debrid...');
         
-        // Add magnet link to Real-Debrid
-        const addResponse = await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/addMagnet`, {
-            magnet: magnetLink
-        }, {
-            headers: {
-                'Authorization': `Bearer ${realdebridConfig.apiKey}`,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
+        // First check if torrent already exists
+        const existingTorrent = await checkExistingTorrent(magnetLink);
+        let torrentId;
         
-        const torrentId = addResponse.data.id;
-        console.log(`📥 Added torrent to Real-Debrid: ${torrentId}`);
-        
-        // Select all files for download
-        await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/selectFiles/${torrentId}`, {
-            files: 'all'
-        }, {
-            headers: {
-                'Authorization': `Bearer ${realdebridConfig.apiKey}`,
-                'Content-Type': 'application/x-www-form-urlencoded'
+        if (existingTorrent) {
+            torrentId = existingTorrent.id;
+            console.log(`♻️  Using existing torrent: ${torrentId}`);
+            
+            // If it's already downloaded, we can proceed directly
+            if (existingTorrent.status === 'downloaded') {
+                console.log('✅ Existing torrent already downloaded');
+                return await getStreamingLinksFromTorrent(existingTorrent);
             }
-        });
+        } else {
+            // Add magnet link to Real-Debrid
+            const addResponse = await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/addMagnet`, {
+                magnet: magnetLink
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${realdebridConfig.apiKey}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            
+            torrentId = addResponse.data.id;
+            console.log(`📥 Added new torrent to Real-Debrid: ${torrentId}`);
+            
+            // Select all files for download
+            await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/selectFiles/${torrentId}`, {
+                files: 'all'
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${realdebridConfig.apiKey}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+        }
         
         // Wait for download to complete (with timeout)
         let attempts = 0;
@@ -864,65 +968,25 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink) {
             
             const torrentInfo = statusResponse.data;
             
+            console.log(`📊 Torrent status: ${torrentInfo.status} (attempt ${attempts + 1}/${maxAttempts})`);
             
+            // Handle different torrent statuses
             if (torrentInfo.status === 'downloaded') {
                 console.log('✅ Torrent downloaded successfully');
-                
-                // Get download links from torrent info
-                if (!torrentInfo.links || torrentInfo.links.length === 0) {
-                    console.log('❌ No download links found in torrent info');
-                    return null;
+                return await getStreamingLinksFromTorrent(torrentInfo);
+            } else if (torrentInfo.status === 'error') {
+                console.log(`❌ Torrent error: ${torrentInfo.error || 'Unknown error'}`);
+                return null;
+            } else if (torrentInfo.status === 'dead') {
+                console.log('❌ Torrent is dead, cannot download');
+                return null;
+            } else {
+                // Still processing - show progress if available
+                if (torrentInfo.progress !== undefined) {
+                    // Fix progress calculation - ensure it's between 0-100%
+                    const progressPercent = Math.min(Math.max(Math.round(torrentInfo.progress * 100), 0), 100);
+                    console.log(`⏳ Torrent progress: ${progressPercent}%`);
                 }
-                
-                console.log(`📁 Found ${torrentInfo.links.length} download links`);
-                
-                // Convert each download link to streaming link using unrestrict API
-                const streamingLinks = [];
-                
-                for (const downloadLink of torrentInfo.links) {
-                    try {
-                        const unrestrictResponse = await axios.post(`${CONFIG.REALDEBRID_API_URL}/unrestrict/link`, {
-                            link: downloadLink
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${realdebridConfig.apiKey}`,
-                                'Content-Type': 'application/x-www-form-urlencoded'
-                            }
-                        });
-                        
-                        const unrestrictData = unrestrictResponse.data;
-                        
-                        // Create streaming link URL
-                        if (unrestrictData.download) {
-                            // Validate that it's a direct file URL
-                            const streamingUrl = unrestrictData.download;
-                            
-                            // Check if it's a video file
-                            const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'];
-                            const isVideoFile = videoExtensions.some(ext => 
-                                streamingUrl.toLowerCase().includes(ext)
-                            );
-                            
-                            if (isVideoFile) {
-                                streamingLinks.push({
-                                    url: streamingUrl,
-                                    filename: unrestrictData.filename,
-                                    size: unrestrictData.filesize,
-                                    downloadUrl: unrestrictData.download
-                                });
-                                console.log(`🔗 Converted to streaming link: ${streamingUrl}`);
-                            } else {
-                                console.log(`⏭️  Skipping non-video file: ${unrestrictData.filename}`);
-                            }
-                        } else {
-                            console.error('No download URL returned from unrestrict API');
-                        }
-                    } catch (error) {
-                        console.error('Error converting link to streaming:', error.response?.data || error.message);
-                    }
-                }
-                
-                return streamingLinks;
             }
             
             attempts++;
