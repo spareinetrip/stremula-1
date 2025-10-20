@@ -930,32 +930,45 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink) {
             }
         } else {
             // Add magnet link to Real-Debrid
-            const addResponse = await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/addMagnet`, {
-                magnet: magnetLink
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${realdebridConfig.apiKey}`,
-                    'Content-Type': 'application/x-www-form-urlencoded'
+            try {
+                const addResponse = await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/addMagnet`, {
+                    magnet: magnetLink
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${realdebridConfig.apiKey}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+                
+                torrentId = addResponse.data.id;
+                console.log(`📥 Added new torrent to Real-Debrid: ${torrentId}`);
+            } catch (error) {
+                console.error('❌ Failed to add torrent to Real-Debrid:', error.response?.data || error.message);
+                if (error.response?.data?.error === 'unknown_ressource') {
+                    console.log('⚠️  Magnet link appears to be invalid or expired');
                 }
-            });
-            
-            torrentId = addResponse.data.id;
-            console.log(`📥 Added new torrent to Real-Debrid: ${torrentId}`);
+                return null;
+            }
             
             // Select all files for download
-            await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/selectFiles/${torrentId}`, {
-                files: 'all'
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${realdebridConfig.apiKey}`,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-            });
+            try {
+                await axios.post(`${CONFIG.REALDEBRID_API_URL}/torrents/selectFiles/${torrentId}`, {
+                    files: 'all'
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${realdebridConfig.apiKey}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+            } catch (error) {
+                console.error('❌ Failed to select files for torrent:', error.response?.data || error.message);
+                return null;
+            }
         }
         
         // Wait for download to complete (with timeout)
         let attempts = 0;
-        const maxAttempts = 30; // 5 minutes max
+        const maxAttempts = process.env.NODE_ENV === 'production' ? 15 : 30; // Shorter timeout for production
         
         while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
@@ -1453,18 +1466,24 @@ async function processEgortechData() {
             for (const [quality, data] of Object.entries(magnetData)) {
                 console.log(`  🔄 Converting ${quality} magnet link to Real-Debrid streaming links...`);
                 
-                const streamingLinks = await convertMagnetToRealDebridStreamingLinks(data.magnetLink);
-                
-                if (streamingLinks && streamingLinks.length > 0) {
-                    streamingData[quality] = {
-                        streamingLinks: streamingLinks,
-                        postUrl: data.postUrl,
-                        title: data.title,
-                        sessions: data.sessions
-                    };
-                    console.log(`    ✅ Successfully converted ${quality} to ${streamingLinks.length} streaming links`);
-                } else {
-                    console.log(`    ❌ Failed to convert ${quality} magnet link`);
+                try {
+                    const streamingLinks = await convertMagnetToRealDebridStreamingLinks(data.magnetLink);
+                    
+                    if (streamingLinks && streamingLinks.length > 0) {
+                        streamingData[quality] = {
+                            streamingLinks: streamingLinks,
+                            postUrl: data.postUrl,
+                            title: data.title,
+                            sessions: data.sessions
+                        };
+                        console.log(`    ✅ Successfully converted ${quality} to ${streamingLinks.length} streaming links`);
+                    } else {
+                        console.log(`    ❌ Failed to convert ${quality} magnet link`);
+                        // Continue processing other qualities even if one fails
+                    }
+                } catch (error) {
+                    console.error(`    ❌ Error converting ${quality} magnet link:`, error.message);
+                    // Continue processing other qualities even if one fails
                 }
             }
             
@@ -1529,10 +1548,20 @@ async function processEgortechData() {
                 }
             }
             
-            processedData.set(gpKey, {
-                ...gpData,
-                sessions: sessions
-            });
+            // Only save Grand Prix if it has at least some valid streaming data
+            const hasValidStreams = Array.from(sessions.values()).some(session => 
+                session.streams && session.streams.length > 0
+            );
+            
+            if (hasValidStreams) {
+                processedData.set(gpKey, {
+                    ...gpData,
+                    sessions: sessions
+                });
+                console.log(`  ✅ Successfully processed ${gpData.name} with ${sessions.size} sessions`);
+            } else {
+                console.log(`  ⚠️  Skipping ${gpData.name} - no valid streaming data found`);
+            }
             
             // Save progress to cache file periodically
             if (currentGp % 3 === 0) {
