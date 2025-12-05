@@ -393,12 +393,13 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
        - Future-proof: Works for any year transition (2025→2026, 2026→2027, etc.)
      - Extracts magnet link and session information
      - **Smart Torrent Handling**: 
-       - Checks if the magnet link was recently attempted and is still downloading (within last 30 minutes)
-       - If still downloading, skips it and moves to the next post
-       - If not recently attempted, converts magnet link to Real Debrid streaming links
-       - Waits up to 1 minute for Real Debrid to download the torrent (reduced from 5 minutes to prevent getting stuck)
-       - If still downloading after 1 minute, saves the status and moves on (will retry later)
-       - Tracks torrent status in the database to avoid repeated attempts
+       - Checks if the magnet link already exists in Real Debrid (reuses existing torrents)
+       - If torrent exists and is downloaded → gets streaming links immediately
+       - If torrent exists but is still downloading → checks status once, shows progress, and moves on (will check again next fetch)
+       - If torrent doesn't exist → adds new torrent and waits up to 1 minute for download
+       - If still downloading after 1 minute, saves the status and moves on (will check again on next fetch cycle)
+       - On each fetch cycle, rechecks existing torrents to see if they've finished downloading
+       - Tracks torrent status in the database and shows progress percentage
      - Saves everything to the database
    - Stops that fetch round when it finds a weekend that is fully processed (both 1080p and 2160p posts have all required sessions)
    - Returns normally and waits for the next scheduled fetch
@@ -544,14 +545,15 @@ sudo systemctl restart stremula
 - Check server logs for authentication errors
 
 ### Torrent downloads taking too long or getting stuck
-- The fetcher now uses a 1-minute timeout for Real Debrid torrent downloads (reduced from 5 minutes)
-- If a torrent is still downloading after 1 minute, the fetcher will:
-  - Save the torrent status to the database
+- The fetcher now uses a 1-minute timeout for new Real Debrid torrent downloads (reduced from 5 minutes)
+- For existing torrents that are still downloading, the fetcher will:
+  - Check the torrent status once (no waiting)
+  - Show the current progress percentage (e.g., "still downloading (45.20%)")
   - Move on to the next post
-  - Skip that magnet link for 30 minutes to avoid repeated attempts
-  - Retry automatically on the next fetch cycle
+  - Recheck on the next fetch cycle (every 15 minutes) to see if it's finished
 - This prevents the script from getting stuck on slow downloads
-- You'll see messages like "⏰ Timeout waiting for torrent..." and "⏭️ Skipping... still downloading from previous attempt" in the logs
+- You'll see messages like "⏳ Torrent still downloading (X.XX%) - will check again next fetch" in the logs
+- Once a torrent finishes downloading, it will be automatically processed on the next fetch cycle
 
 ### Database errors
 - Ensure the plugin directory is writable

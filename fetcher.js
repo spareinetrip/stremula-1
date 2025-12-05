@@ -539,6 +539,34 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey, postI
                     await db.updateTorrentStatus(postId, quality, torrentId, 'downloaded');
                 }
                 return await getStreamingLinksFromTorrent(existingTorrent, apiKey);
+            } else {
+                // Existing torrent is still downloading/processing - check current status once
+                const statusResponse = await axios.get(`${REALDEBRID_API_URL}/torrents/info/${torrentId}`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
+                });
+                
+                const torrentInfo = statusResponse.data;
+                const currentStatus = torrentInfo.status;
+                
+                // Update database with current status
+                if (postId && quality) {
+                    await db.updateTorrentStatus(postId, quality, torrentId, currentStatus);
+                }
+                
+                if (currentStatus === 'downloaded') {
+                    console.log(`✅ Torrent ${torrentId} finished downloading`);
+                    return await getStreamingLinksFromTorrent(torrentInfo, apiKey);
+                } else if (currentStatus === 'error' || currentStatus === 'dead') {
+                    console.log(`❌ Torrent ${torrentId} failed with status: ${currentStatus}`);
+                    return null;
+                } else {
+                    // Still downloading - show progress and return
+                    const progress = torrentInfo.progress !== undefined 
+                        ? torrentInfo.progress.toFixed(2) 
+                        : 'unknown';
+                    console.log(`⏳ Torrent ${torrentId} still ${currentStatus} (${progress}%) - will check again next fetch`);
+                    return { stillDownloading: true, torrentId, status: currentStatus };
+                }
             }
         } else {
             isNewTorrent = true;
@@ -842,13 +870,6 @@ async function processPost(post, config) {
     const magnetLink = extractMagnetLink(postContent);
     if (!magnetLink) {
         return null;
-    }
-    
-    // Check if this magnet link was recently attempted and is still downloading
-    const shouldSkip = await db.shouldSkipMagnetLink(magnetLink, 30); // Skip if checked within last 30 minutes
-    if (shouldSkip) {
-        console.log(`⏭️  Skipping ${quality} magnet link for ${grandPrix.name} - still downloading from previous attempt`);
-        return { skipped: true, postId: post.id, quality, reason: 'still_downloading' };
     }
     
     const sessions = extractSessionsFromContent(postContent);
