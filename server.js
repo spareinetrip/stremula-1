@@ -682,8 +682,41 @@ async function startServer() {
         });
 
         // Handle client errors gracefully
+        // Track error frequency to avoid spam
+        const clientErrorCounts = new Map();
+        const ERROR_LOG_INTERVAL = 60000; // 1 minute
+        
         httpsServerInstance.on('clientError', (err, socket) => {
-            console.error('⚠️  HTTPS client error:', err.message);
+            const errorMsg = err.message || '';
+            
+            // Filter out expected SSL certificate errors (self-signed cert rejections)
+            // These are normal when clients don't trust the self-signed certificate
+            if (errorMsg.includes('certificate unknown') || 
+                errorMsg.includes('sslv3 alert certificate unknown') ||
+                errorMsg.includes('SSL alert number 46')) {
+                // Suppress these expected errors - they're normal for self-signed certs
+                socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+                return;
+            }
+            
+            // For other errors, rate limit logging to avoid spam
+            const errorKey = errorMsg.substring(0, 100); // Use first 100 chars as key
+            const now = Date.now();
+            const errorInfo = clientErrorCounts.get(errorKey);
+            
+            if (!errorInfo || (now - errorInfo.lastLogged) > ERROR_LOG_INTERVAL) {
+                const count = errorInfo ? errorInfo.count + 1 : 1;
+                clientErrorCounts.set(errorKey, { count, lastLogged: now });
+                
+                if (count === 1) {
+                    console.error('⚠️  HTTPS client error:', errorMsg);
+                } else {
+                    console.error(`⚠️  HTTPS client error (${count} times in last minute):`, errorMsg);
+                }
+            } else {
+                errorInfo.count++;
+            }
+            
             socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
         });
 
