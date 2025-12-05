@@ -17,7 +17,8 @@ const DEFAULT_CONFIG = {
         userAgent: 'Stremula1/3.0 (by u/yourusername)'
     },
     server: {
-        port: 7003
+        port: 7003,
+        publicBaseUrl: ''
     },
     fetcher: {
         intervalMinutes: 15,
@@ -86,6 +87,10 @@ function getConfig() {
     
     if (process.env.PORT) {
         config.server.port = parseInt(process.env.PORT);
+    }
+    
+    if (process.env.PUBLIC_BASE_URL) {
+        config.server.publicBaseUrl = process.env.PUBLIC_BASE_URL;
     }
     
     return config;

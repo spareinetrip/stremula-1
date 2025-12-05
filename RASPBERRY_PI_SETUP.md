@@ -304,6 +304,7 @@ nano config.json
   - `password`: Your Reddit password
   - `userAgent`: Should match your Reddit username (e.g., `"Stremula1/3.0 (by u/yourusername)"`)
 - Set `realdebrid.enabled` to `true`
+- Set `publicBaseUrl` to your IP address (`"https://YOUR_IP:7004"` for network access)
 
 **To save in nano:**
 - Press `Ctrl + X`
@@ -325,7 +326,8 @@ You should see output from both services:
 Example output:
 ```
 [SERVER] ✅ Database initialized
-[SERVER] 🌐 HTTP server running on port 7003
+[SERVER] 🌐 HTTP server running on port 7003 (localhost only)
+[SERVER] 🔒 HTTPS server running on port 7004 (for IP access)
 [FETCHER] ✅ Database initialized for fetcher service
 [FETCHER] 🚀 Running initial fetch...
 ```
@@ -626,20 +628,131 @@ To access from your phone, computer, or TV on the same WiFi network:
    ```
    Example output: `192.168.1.100`
 
-2. **Open Stremio** on your device (phone, computer, TV, etc.)
-3. **Go to Addons** → **Community Addons**
-4. **Click the "+" button**
-5. **Enter your addon URL:**
+2. **Update config.json** (optional but recommended):
+   ```bash
+   # If in home directory:
+   nano ~/stremula-1/config.json
+   
+   # If in /opt:
+   nano /opt/stremula-1/config.json
    ```
-   http://192.168.1.100:7003/manifest.json
+   Set `publicBaseUrl` to your Pi's IP:
+   ```json
+   "server": {
+     "port": 7003,
+     "publicBaseUrl": "https://192.168.1.100:7004"
+   }
+   ```
+   Save and exit (`Ctrl + X`, `Y`, `Enter`)
+
+3. **Restart the service** (if it's running):
+   ```bash
+   # If using separate services:
+   sudo systemctl restart stremula-server
+   
+   # If using single service:
+   sudo systemctl restart stremula
+   ```
+
+4. **Open Stremio** on your device (phone, computer, TV, etc.)
+5. **Go to Addons** → **Community Addons**
+6. **Click the "+" button**
+7. **Enter your addon URL:**
+   ```
+   https://192.168.1.100:7004/manifest.json
    ```
    (Replace `192.168.1.100` with your Pi's actual IP address)
 
-6. **Click "Install"**
+8. **Handle the security warning:**
+   - Your browser/device may show a "Website is not secure" warning
+   - This is normal for self-signed certificates
+   - Click "Advanced" → "Proceed" or "Accept the Risk"
+   - This is safe for local network use
 
-**Note:** Make sure both your Pi and the device running Stremio are on the same WiFi/LAN network.
+9. **Click "Install"**
 
 The addon should now appear in your Stremio library!
+
+### Option C: Internet Access (Different Network)
+
+To access your Pi's addon from outside your local network (e.g., from work, mobile data, or another location):
+
+**⚠️ Security Note:** Exposing your server to the internet has security implications. Only do this if you understand the risks and trust your network setup. See the security section below.
+
+1. **Find your public IP address:**
+   ```bash
+   curl ifconfig.me
+   ```
+   Example: `203.0.113.42`
+
+2. **Configure Router Port Forwarding:**
+   - Log into your router's admin panel (usually `192.168.1.1` or `192.168.0.1`)
+   - Navigate to "Port Forwarding" or "Virtual Server" settings
+   - Add a new rule:
+     - **External Port**: `7004`
+     - **Internal IP**: Your Pi's local IP (e.g., `192.168.1.100`)
+     - **Internal Port**: `7004`
+     - **Protocol**: `TCP`
+   - Save the configuration
+
+3. **Configure Firewall on Pi:**
+   ```bash
+   # Allow port 7004 through firewall
+   sudo ufw allow 7004/tcp
+   
+   # Verify firewall status
+   sudo ufw status
+   ```
+
+4. **Update config.json:**
+   ```bash
+   # If in home directory:
+   nano ~/stremula-1/config.json
+   
+   # If in /opt:
+   nano /opt/stremula-1/config.json
+   ```
+   Set `publicBaseUrl` to your public IP:
+   ```json
+   "server": {
+     "port": 7003,
+     "publicBaseUrl": "https://203.0.113.42:7004"
+   }
+   ```
+   (Replace with your actual public IP)
+
+5. **Restart the service:**
+   ```bash
+   # If using separate services:
+   sudo systemctl restart stremula-server
+   
+   # If using single service:
+   sudo systemctl restart stremula
+   ```
+
+6. **Open Stremio** on your remote device
+7. **Go to Addons** → **Community Addons**
+8. **Click the "+" button**
+9. **Enter your addon URL:**
+   ```
+   https://203.0.113.42:7004/manifest.json
+   ```
+   (Replace with your actual public IP)
+
+10. **Handle the security warning** (same as Option B)
+
+**Note about Dynamic IPs:**
+- Most home internet connections have dynamic IPs that change periodically
+- If your IP changes, you'll need to update the `publicBaseUrl` in config.json
+- Consider using a Dynamic DNS service (e.g., DuckDNS, No-IP) for a stable hostname
+
+### 🔒 Self-Signed Certificate Warnings
+
+**Security Warning:**
+- The HTTPS server uses a self-signed certificate for convenience
+- Browsers will show security warnings - this is **normal and expected**
+- For local network use, this is perfectly safe
+- For production/public servers, consider using Let's Encrypt or a proper SSL certificate
 
 ---
 
@@ -733,9 +846,6 @@ hostname -I
 ```bash
 # From your Mac or any device on the network
 curl http://YOUR_PI_IP:7003/manifest.json
-
-# From the Pi itself
-curl http://localhost:7003/manifest.json
 ```
 
 ---
@@ -795,10 +905,8 @@ curl http://localhost:7003/manifest.json
    curl http://localhost:7003/manifest.json
    ```
 
-3. **Check network connectivity:**
-   - Make sure both devices are on the same WiFi/LAN network
-   - Try accessing from the same device first: `http://localhost:7003/manifest.json`
-   - Then try from another device using the Pi's IP: `http://YOUR_PI_IP:7003/manifest.json`
+3. **Check publicBaseUrl in config.json:**
+   - Should be set to your Pi's IP: `"http://192.168.1.100:7003"`
 
 ---
 
