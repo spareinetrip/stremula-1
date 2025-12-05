@@ -3,7 +3,6 @@ const { spawn } = require('child_process');
 const { fetchAndProcess } = require('./fetcher');
 const { getConfig } = require('./config');
 const db = require('./database');
-const { checkForUpdates } = require('./updater');
 
 // Auto-restart configuration
 const RESTART_CONFIG = {
@@ -90,89 +89,34 @@ function shutdownService(callback) {
     setTimeout(callback, 1000);
 }
 
-// Check if running under concurrently
-function isRunningUnderConcurrently() {
-    try {
-        // Check parent process command
-        const ppid = process.ppid;
-        if (ppid) {
-            try {
-                // Try to read parent process command on Unix systems
-                const fs = require('fs');
-                const parentCmd = fs.readFileSync(`/proc/${ppid}/cmdline`, 'utf8');
-                return parentCmd.includes('concurrently') || parentCmd.includes('npm');
-            } catch (e) {
-                // Fallback: check environment or process title
-                // If npm start was used, we're likely under concurrently
-                const npmCommand = process.env.npm_lifecycle_event;
-                return npmCommand === 'start';
-            }
-        }
-    } catch (error) {
-        // If we can't determine, assume we might be under concurrently if npm start
-        const npmCommand = process.env.npm_lifecycle_event;
-        return npmCommand === 'start';
-    }
-    return false;
-}
-
-// Restart the fetcher service process or entire npm start if under concurrently
+// Restart the fetcher service process
 function restartService() {
     console.log('🔄 Restarting fetcher service...');
     isRestarting = true;
 
-    // Check if we're running under concurrently (via npm start)
-    if (isRunningUnderConcurrently()) {
-        console.log('📦 Detected npm start (concurrently), restarting entire service...');
-        
-        // Restart the entire npm start process
-        // This ensures both server and fetcher restart together
-        const restartScript = process.platform === 'win32' 
-            ? 'npm.cmd' 
-            : 'npm';
-        
-        const child = spawn(restartScript, ['start'], {
-            stdio: 'inherit',
-            detached: true, // Detach so it continues after parent exits
-            cwd: __dirname,
-            shell: true
-        });
+    // Use child_process to spawn a new instance
+    const args = process.argv.slice(1);
+    const child = spawn(process.execPath, args, {
+        stdio: 'inherit',
+        detached: false
+    });
 
-        child.on('error', (error) => {
-            console.error('❌ Failed to restart npm start:', error);
-            process.exit(1);
-        });
+    child.on('error', (error) => {
+        console.error('❌ Failed to restart fetcher service:', error);
+        process.exit(1);
+    });
 
-        // Give the new process a moment to start
-        setTimeout(() => {
-            console.log('✅ New process started, exiting current process...');
-            process.exit(0);
-        }, 2000);
-    } else {
-        // Running standalone, restart just this process
-        const args = process.argv.slice(1);
-        const child = spawn(process.execPath, args, {
-            stdio: 'inherit',
-            detached: false
-        });
+    child.on('exit', (code) => {
+        if (code !== 0) {
+            console.error(`❌ Fetcher service restart process exited with code ${code}`);
+            process.exit(code);
+        }
+    });
 
-        child.on('error', (error) => {
-            console.error('❌ Failed to restart fetcher service:', error);
-            process.exit(1);
-        });
-
-        child.on('exit', (code) => {
-            if (code !== 0) {
-                console.error(`❌ Fetcher service restart process exited with code ${code}`);
-                process.exit(code);
-            }
-        });
-
-        // Exit current process after spawning new one
-        setTimeout(() => {
-            process.exit(0);
-        }, 1000);
-    }
+    // Exit current process after spawning new one
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
 }
 
 // Initialize database and start fetcher service
@@ -222,13 +166,6 @@ async function startFetcherService() {
     console.log('\n🚀 Running initial fetch...');
     try {
         await fetchAndProcess();
-        
-        // Check for updates after initial fetch completes
-        const updaterConfig = config.updater || { enabled: false };
-        if (updaterConfig.enabled) {
-            console.log('\n🔍 Checking for updates after initial fetch completion...');
-            await checkForUpdates(updaterConfig, 'fetcher');
-        }
     } catch (error) {
         console.error('❌ Initial fetch failed:', error);
     }
@@ -239,13 +176,6 @@ async function startFetcherService() {
         try {
             const result = await fetchAndProcess();
             console.log(`⏰ Next fetch scheduled in ${intervalMinutes} minutes`);
-            
-            // Check for updates after fetch completes (only when fetcher is idle)
-            const updaterConfig = config.updater || { enabled: false };
-            if (updaterConfig.enabled) {
-                console.log('\n🔍 Checking for updates after fetch completion...');
-                await checkForUpdates(updaterConfig, 'fetcher');
-            }
         } catch (error) {
             console.error('❌ Scheduled fetch failed:', error);
             console.error('Stack:', error.stack);
@@ -260,9 +190,6 @@ async function startFetcherService() {
     console.log('✅ Fetcher service running. Press Ctrl+C to stop.');
     console.log(`⏰ Next fetch scheduled in ${intervalMinutes} minutes`);
     console.log(`🔄 Auto-restart enabled (max ${RESTART_CONFIG.maxRestarts} restarts per ${RESTART_CONFIG.restartWindowMs/1000}s)`);
-    
-    // Note: Auto-updater now runs after each fetch completes (not on a schedule)
-    // This ensures updates only happen when fetcher is idle
     
     // Keep the process alive
     process.on('SIGINT', () => {

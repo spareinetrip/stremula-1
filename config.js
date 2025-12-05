@@ -23,12 +23,6 @@ const DEFAULT_CONFIG = {
     fetcher: {
         intervalMinutes: 15,
         maxScrollMonths: 3
-    },
-    updater: {
-        enabled: true,
-        autoPull: true,
-        autoRestart: true,
-        branch: 'main'
     }
 };
 
@@ -44,8 +38,7 @@ function loadConfig() {
                 realdebrid: { ...DEFAULT_CONFIG.realdebrid, ...config.realdebrid },
                 reddit: { ...DEFAULT_CONFIG.reddit, ...config.reddit },
                 server: { ...DEFAULT_CONFIG.server, ...config.server },
-                fetcher: { ...DEFAULT_CONFIG.fetcher, ...config.fetcher },
-                updater: { ...DEFAULT_CONFIG.updater, ...(config.updater || {}) }
+                fetcher: { ...DEFAULT_CONFIG.fetcher, ...config.fetcher }
             };
         } else {
             // Create default config file

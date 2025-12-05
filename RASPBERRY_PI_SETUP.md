@@ -164,7 +164,7 @@ cd /opt/stremula-1
 
 **Note:** Replace `https://github.com/YOUR_USERNAME/stremula-1.git` with your actual GitHub repository URL.
 
-**✅ Git remote automatically configured:** Using `git clone` automatically sets up the git remote, which means the auto-updater will work immediately without any additional setup. The auto-updater checks for updates after each fetch completes (not on a separate schedule), ensuring updates never conflict with fetcher operations.
+**✅ Git remote automatically configured:** Using `git clone` automatically sets up the git remote.
 
 **⚠️ Important:** If you install in `/opt`, remember to update the `WorkingDirectory` path in the systemd service files (Part 6) from `/home/pi/stremula-1` to `/opt/stremula-1`.
 
@@ -199,7 +199,7 @@ scp -r stremula-1 pi@192.168.1.100:/tmp/
 # sudo chown -R $USER:$USER /opt/stremula-1
 ```
 
-**Important Note:** If you use SCP or download the project as a ZIP file (instead of `git clone`), the git remote will NOT be automatically configured. The auto-updater requires a git remote to check for updates (it checks after each fetch completes). To set it up:
+**Important Note:** If you use SCP or download the project as a ZIP file (instead of `git clone`), the git remote will NOT be automatically configured. To set it up:
 
 **If in home directory:**
 ```bash
@@ -231,7 +231,7 @@ git remote add origin https://github.com/YOUR_USERNAME/stremula-1.git
 git remote -v
 ```
 
-**Recommendation:** Using `git clone` (the first method) is recommended because it automatically sets up the remote, making the auto-updater work immediately.
+**Recommendation:** Using `git clone` (the first method) is recommended because it automatically sets up the remote.
 
 **Enter your password when prompted.**
 
