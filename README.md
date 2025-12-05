@@ -66,7 +66,21 @@ cd stremula-1
 npm install
 ```
 
-### Step 2: Configure the Plugin
+### Step 2: Generate Configuration File
+
+The `config.json` file is automatically created on first run. You can generate it by running the app briefly:
+
+```bash
+# Run the server briefly to generate config.json
+# Press Ctrl+C after a few seconds to stop it
+npm start
+```
+
+Wait a few seconds, then press `Ctrl + C` to stop the services. The `config.json` file will now exist in the project directory.
+
+**Note:** The config file is automatically created with default values when any service starts. If you prefer, you can create it manually, but the auto-generation is easier.
+
+### Step 3: Configure the Plugin
 
 Edit the `config.json` file and fill in your credentials:
 
@@ -102,15 +116,21 @@ Edit the `config.json` file and fill in your credentials:
 ```
 
 **Important Notes:**
-- Replace all `YOUR_*` placeholders with your actual credentials
-- **`userAgent`**: Should match your Reddit username (e.g., if your username is `yourusername`, use `"Stremula1/3.0 (by u/yourusername)"`). This is required by Reddit's API.
+- The auto-generated config file will have empty values for credentials. Replace them with your actual values:
+  - `realdebrid.apiKey`: Your Real Debrid API key
+  - `realdebrid.enabled`: Set to `true` to enable Real Debrid
+  - `reddit.clientId`: Your Reddit app client ID
+  - `reddit.clientSecret`: Your Reddit app client secret
+  - `reddit.username`: Your Reddit username
+  - `reddit.password`: Your Reddit password
+  - `reddit.userAgent`: Should match your Reddit username (e.g., if your username is `yourusername`, use `"Stremula1/3.0 (by u/yourusername)"`). This is required by Reddit's API.
 - **`publicBaseUrl`**: 
   - Leave empty (`""`) if running locally (will auto-detect from requests)
   - Set to your public URL (e.g., `"https://YOUR_IP:7004"` for IP access or `"https://yourdomain.com"` for public server) if accessing from other devices on your network or the internet
   - This is used for serving media files (posters, thumbnails) to Stremio clients
 - The `intervalMinutes` setting controls how often the fetcher checks for new posts (default: 15 minutes)
 
-### Step 3: Initialize the Database
+### Step 4: Initialize the Database
 
 The database will be automatically created on first run. No manual setup needed!
 

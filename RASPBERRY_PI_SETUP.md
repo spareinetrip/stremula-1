@@ -273,7 +273,21 @@ npm install
 
 This will take a few minutes. Wait for it to complete.
 
-### Step 3: Configure the Addon
+### Step 3: Generate Configuration File
+
+The `config.json` file is automatically created on first run. Let's generate it now:
+
+```bash
+# Run the server briefly to generate config.json
+# Press Ctrl+C after a few seconds to stop it
+npm start
+```
+
+Wait a few seconds, then press `Ctrl + C` to stop the services. The `config.json` file will now exist in the project directory.
+
+**Note:** If you prefer to create the config file manually, you can skip this step and create it yourself, but the auto-generation is easier.
+
+### Step 4: Configure the Addon
 
 Edit the configuration file:
 
@@ -282,16 +296,22 @@ nano config.json
 ```
 
 **Fill in your credentials:**
-- Replace `YOUR_REAL_DEBRID_API_KEY` with your Real Debrid API key
-- Replace all Reddit credentials with your actual values
-- Set `publicBaseUrl` to your Pi's IP address (e.g., `"http://192.168.1.100:7003"`)
+- Replace the empty `apiKey` value with your Real Debrid API key
+- Replace all empty Reddit credential values with your actual values:
+  - `clientId`: Your Reddit app client ID
+  - `clientSecret`: Your Reddit app client secret
+  - `username`: Your Reddit username
+  - `password`: Your Reddit password
+  - `userAgent`: Should match your Reddit username (e.g., `"Stremula1/3.0 (by u/yourusername)"`)
+- Set `realdebrid.enabled` to `true`
+- Set `publicBaseUrl` to your IP address (`"https://YOUR_IP:7004"` for network access)
 
 **To save in nano:**
 - Press `Ctrl + X`
 - Press `Y` to confirm
 - Press `Enter` to save
 
-### Step 4: Test the Installation
+### Step 5: Test the Installation
 
 Run both services to make sure everything works:
 
@@ -311,6 +331,8 @@ Example output:
 [FETCHER] ✅ Database initialized for fetcher service
 [FETCHER] 🚀 Running initial fetch...
 ```
+
+**Note:** If you see configuration errors (like "Real Debrid not configured" or "Reddit API not configured"), that's normal if you haven't filled in your credentials yet. Make sure you've completed Step 4 above.
 
 **Press `Ctrl + C` to stop both services** (we'll set them up to run automatically next).
 
