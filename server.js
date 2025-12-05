@@ -1,27 +1,10 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
-const https = require('https');
 const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
-// Try to use CA-signed certificates first, fallback to self-signed
-let getCertificates;
-try {
-    const caUtils = require('./cert-ca-utils');
-    getCertificates = caUtils.getCertificates;
-    // Test if openssl is available (will fail gracefully if not)
-    require('child_process').execSync('which openssl', { stdio: 'ignore' });
-    console.log('✅ Using CA-signed certificates (for iOS/tvOS compatibility)');
-} catch (e) {
-    getCertificates = require('./cert-utils').getCertificates;
-    if (e.code === 'ENOENT' || e.message.includes('openssl')) {
-        console.log('⚠️  Using self-signed certificates (openssl not found - install with: sudo apt-get install openssl)');
-    } else {
-        console.log('⚠️  Using self-signed certificates (CA signing unavailable)');
-    }
-}
 
 // Initialize database
 let databaseReady = false;
@@ -40,7 +23,6 @@ const RESTART_CONFIG = {
 let restartAttempts = [];
 let isRestarting = false;
 let httpServerInstance = null;
-let httpsServerInstance = null;
 let errorHandlersSetup = false;
 
 // Helper function to convert slug to GP name
@@ -116,57 +98,61 @@ function getThumbnailForSession(sessionType) {
     const sessionTypeLower = sessionType.toLowerCase();
     
     if (sessionTypeLower.includes('practice 1') || sessionTypeLower.includes('free practice one') || sessionTypeLower.includes('fp1')) {
-        return `${getPublicBaseUrl()}/media/practice 1.png`;
+        return `${getBaseUrl()}/media/practice 1.png`;
     }
     if (sessionTypeLower.includes('practice 2') || sessionTypeLower.includes('free practice two') || sessionTypeLower.includes('fp2')) {
-        return `${getPublicBaseUrl()}/media/practice 2.png`;
+        return `${getBaseUrl()}/media/practice 2.png`;
     }
     if (sessionTypeLower.includes('practice 3') || sessionTypeLower.includes('free practice three') || sessionTypeLower.includes('fp3')) {
-        return `${getPublicBaseUrl()}/media/practice 3.png`;
+        return `${getBaseUrl()}/media/practice 3.png`;
     }
     if (sessionTypeLower.includes('sprint qualifying')) {
-        return `${getPublicBaseUrl()}/media/sprint qualifying.png`;
+        return `${getBaseUrl()}/media/sprint qualifying.png`;
     }
     if (sessionTypeLower.includes('sprint') && !sessionTypeLower.includes('qualifying')) {
-        return `${getPublicBaseUrl()}/media/sprint.png`;
+        return `${getBaseUrl()}/media/sprint.png`;
     }
     if (sessionTypeLower.includes('qualifying') || sessionTypeLower.includes('quali')) {
-        return `${getPublicBaseUrl()}/media/qualifying.png`;
+        return `${getBaseUrl()}/media/qualifying.png`;
     }
     if (sessionTypeLower.includes('race')) {
-        return `${getPublicBaseUrl()}/media/race.png`;
+        return `${getBaseUrl()}/media/race.png`;
     }
-    return `${getPublicBaseUrl()}/media/practice 1.png`;
+    return `${getBaseUrl()}/media/practice 1.png`;
 }
 
 function getPosterForGrandPrix(gpName) {
     const posterFile = posterMap[gpName];
     if (posterFile) {
-        return `${getPublicBaseUrl()}/media/${posterFile}`;
+        return `${getBaseUrl()}/media/${posterFile}`;
     }
-    return `${getPublicBaseUrl()}/media/background.jpeg`;
+    return `${getBaseUrl()}/media/background.jpeg`;
 }
 
-// Helper to check if host is localhost
-function isLocalhost(host) {
-    if (!host) return true;
-    const hostname = host.split(':')[0];
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+// Helper to get local IP address
+function getLocalIP() {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
 }
 
-function getPublicBaseUrl() {
+function getBaseUrl() {
     const config = getConfig();
-    // Use configured base URL if set
-    if (config.server.publicBaseUrl) {
-        return config.server.publicBaseUrl;
-    }
-    // Use dynamically detected base URL from requests
+    const httpPort = config.server.port || 7003;
+    // Use dynamically detected base URL from requests if available
     if (dynamicBaseUrl) {
         return dynamicBaseUrl;
     }
-    // Fallback to localhost (HTTP for localhost)
-    const httpPort = config.server.port || 7003;
-    return `http://localhost:${httpPort}`;
+    // Fallback to local IP address
+    const localIP = getLocalIP();
+    return `http://${localIP}:${httpPort}`;
 }
 
 // Addon Manifest
@@ -221,8 +207,8 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
                 type: 'series',
                 name: weekend.grand_prix_name,
                 poster: getPosterForGrandPrix(weekend.grand_prix_name),
-                background: `${getPublicBaseUrl()}/media/background.jpeg`,
-                logo: `${getPublicBaseUrl()}/media/logo.webp`,
+                background: `${getBaseUrl()}/media/background.jpeg`,
+                logo: `${getBaseUrl()}/media/logo.webp`,
                 description: `Sky Sports F1 presents the ${weekend.grand_prix_name}, with Martin Brundle and David Croft analysing the action`,
                 releaseInfo: `Round ${weekend.grand_prix_round} • ${weekend.country}`,
                 genres: ['Formula 1', 'Motorsport', 'Racing', 'Real-Debrid'],
@@ -335,8 +321,8 @@ builder.defineMetaHandler(async ({ type, id }) => {
             type: 'series',
             name: weekendData.grand_prix_name,
             poster: getPosterForGrandPrix(weekendData.grand_prix_name),
-            background: `${getPublicBaseUrl()}/media/background.jpeg`,
-            logo: `${getPublicBaseUrl()}/media/logo.webp`,
+            background: `${getBaseUrl()}/media/background.jpeg`,
+            logo: `${getBaseUrl()}/media/logo.webp`,
             description: `Sky Sports F1 presents the ${weekendData.grand_prix_name}, with Martin Brundle and David Croft analysing the action`,
             releaseInfo: `Round ${weekendData.grand_prix_round} • ${weekendData.country}`,
             genres: ['Formula 1', 'Motorsport', 'Racing'],
@@ -488,54 +474,27 @@ function handleCriticalError(type, error) {
     });
 }
 
-// Gracefully shutdown servers
+// Gracefully shutdown server
 function shutdownServers(callback) {
     isRestarting = true;
-    let shutdownCount = 0;
-    const totalServers = (httpServerInstance ? 1 : 0) + (httpsServerInstance ? 1 : 0);
 
-    if (totalServers === 0) {
+    if (!httpServerInstance) {
         // Give a small delay to ensure any pending operations complete
         setTimeout(callback, 500);
         return;
     }
 
-    const checkShutdown = () => {
-        shutdownCount++;
-        if (shutdownCount >= totalServers) {
-            // Additional delay to ensure port is fully released
-            console.log('⏳ Waiting for port to be released...');
-            setTimeout(callback, 1000);
-        }
-    };
-
-    if (httpServerInstance) {
-        // Stop accepting new connections
-        httpServerInstance.close(() => {
-            console.log('✅ HTTP server closed');
-            httpServerInstance = null;
-            checkShutdown();
-        });
-        
-        // Also close all existing connections
-        httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
-    } else {
-        checkShutdown();
-    }
-
-    if (httpsServerInstance) {
-        // Stop accepting new connections
-        httpsServerInstance.close(() => {
-            console.log('✅ HTTPS server closed');
-            httpsServerInstance = null;
-            checkShutdown();
-        });
-        
-        // Also close all existing connections
-        httpsServerInstance.closeAllConnections && httpsServerInstance.closeAllConnections();
-    } else {
-        checkShutdown();
-    }
+    // Stop accepting new connections
+    httpServerInstance.close(() => {
+        console.log('✅ HTTP server closed');
+        httpServerInstance = null;
+        // Additional delay to ensure port is fully released
+        console.log('⏳ Waiting for port to be released...');
+        setTimeout(callback, 1000);
+    });
+    
+    // Also close all existing connections
+    httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
 
     // Force close after timeout
     setTimeout(() => {
@@ -543,11 +502,6 @@ function shutdownServers(callback) {
             httpServerInstance.close();
             httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
             httpServerInstance = null;
-        }
-        if (httpsServerInstance) {
-            httpsServerInstance.close();
-            httpsServerInstance.closeAllConnections && httpsServerInstance.closeAllConnections();
-            httpsServerInstance = null;
         }
         callback();
     }, 10000);
@@ -618,7 +572,6 @@ async function startServer() {
     }
     
     const httpPort = config.server.port || 7003;
-    const httpsPort = httpPort + 1; // HTTPS on next port
     const app = express();
     
     // Dynamic base URL detection from requests
@@ -626,13 +579,9 @@ async function startServer() {
         try {
             const host = req.headers.host;
             if (host) {
-                // Determine protocol based on host
-                // localhost uses HTTP, IP addresses use HTTPS
-                const isLocal = isLocalhost(host);
-                const proto = isLocal ? 'http' : (req.headers['x-forwarded-proto'] || '').toString().split(',')[0] || 'https';
                 // Update dynamic base URL based on the request
-                // This ensures images use the correct host and protocol
-                dynamicBaseUrl = `${proto}://${host}`;
+                // This ensures images use the correct host
+                dynamicBaseUrl = `http://${host}`;
             }
         } catch (_e) {}
         next();
@@ -645,17 +594,7 @@ async function startServer() {
     const router = getRouter({ manifest, get: builder.getInterface().get });
     app.use('/', router);
     
-    // Get SSL certificates for HTTPS (required for IP access)
-    let sslOptions;
-    try {
-        sslOptions = await getCertificates();
-    } catch (error) {
-        console.error('⚠️  Failed to load SSL certificates:', error.message);
-        console.error('   HTTPS will not be available. Only localhost HTTP will work.');
-        sslOptions = null;
-    }
-    
-    // Start HTTP server for localhost (Stremio allows HTTP for 127.0.0.1)
+    // Start HTTP server
     httpServerInstance = http.createServer(app);
     
     // Add error handler to prevent crashes from propagating
@@ -678,107 +617,34 @@ async function startServer() {
         socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
     });
 
+    // Get local IP address for display
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    const localIPs = [];
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                localIPs.push(iface.address);
+            }
+        }
+    }
+
     try {
-        httpServerInstance.listen(httpPort, '127.0.0.1', () => {
-            console.log(`\n🌐 HTTP server running on port ${httpPort} (localhost only)`);
+        httpServerInstance.listen(httpPort, '0.0.0.0', () => {
+            console.log(`\n🌐 HTTP server running on port ${httpPort}`);
             console.log(`📡 Install in Stremio (localhost): http://localhost:${httpPort}/manifest.json`);
             console.log(`📡 Install in Stremio (localhost): http://127.0.0.1:${httpPort}/manifest.json`);
+            if (localIPs.length > 0) {
+                console.log(`📡 Install in Stremio (local network):`);
+                localIPs.forEach(ip => {
+                    console.log(`   http://${ip}:${httpPort}/manifest.json`);
+                });
+            }
         });
     } catch (error) {
         console.error('❌ Failed to start HTTP server:', error);
         handleCriticalError('httpServerStart', error);
         return;
-    }
-    
-    // Start HTTPS server for IP access on different port (if certificates available)
-    if (sslOptions) {
-        httpsServerInstance = https.createServer(sslOptions, app);
-        
-        // Handle HTTPS server errors
-        httpsServerInstance.on('error', (error) => {
-            if (error.code === 'EADDRINUSE') {
-                console.error(`\n❌ Port ${httpsPort} is already in use.`);
-                console.error(`   Please stop the other process or use a different port.`);
-                console.error(`   To find and kill the process: kill -9 $(lsof -ti:${httpsPort})`);
-                // Don't restart for port conflicts
-            } else {
-                console.error('❌ HTTPS server error:', error);
-                // Don't restart for HTTPS errors if HTTP is still running
-                console.error('⚠️  HTTP server continues running for localhost access');
-            }
-        });
-
-        // Handle client errors gracefully
-        // Track error frequency to avoid spam
-        const clientErrorCounts = new Map();
-        const ERROR_LOG_INTERVAL = 60000; // 1 minute
-        
-        httpsServerInstance.on('clientError', (err, socket) => {
-            const errorMsg = err.message || '';
-            
-            // Filter out expected SSL certificate errors (self-signed cert rejections)
-            // These are normal when clients don't trust the self-signed certificate
-            if (errorMsg.includes('certificate unknown') || 
-                errorMsg.includes('sslv3 alert certificate unknown') ||
-                errorMsg.includes('SSL alert number 46')) {
-                // Suppress these expected errors - they're normal for self-signed certs
-                socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-                return;
-            }
-            
-            // For other errors, rate limit logging to avoid spam
-            const errorKey = errorMsg.substring(0, 100); // Use first 100 chars as key
-            const now = Date.now();
-            const errorInfo = clientErrorCounts.get(errorKey);
-            
-            if (!errorInfo || (now - errorInfo.lastLogged) > ERROR_LOG_INTERVAL) {
-                const count = errorInfo ? errorInfo.count + 1 : 1;
-                clientErrorCounts.set(errorKey, { count, lastLogged: now });
-                
-                if (count === 1) {
-                    console.error('⚠️  HTTPS client error:', errorMsg);
-                } else {
-                    console.error(`⚠️  HTTPS client error (${count} times in last minute):`, errorMsg);
-                }
-            } else {
-                errorInfo.count++;
-            }
-            
-            socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-        });
-
-        try {
-            httpsServerInstance.listen(httpsPort, '0.0.0.0', () => {
-                console.log(`\n🔒 HTTPS server running on port ${httpsPort} (for IP access)`);
-                
-                // Get local IP addresses for display
-                const os = require('os');
-                const interfaces = os.networkInterfaces();
-                const ips = [];
-                for (const name of Object.keys(interfaces)) {
-                    for (const iface of interfaces[name]) {
-                        if (iface.family === 'IPv4' && !iface.internal) {
-                            ips.push(iface.address);
-                        }
-                    }
-                }
-                
-                if (ips.length > 0) {
-                    console.log(`📡 Install in Stremio (via IP):`);
-                    ips.forEach(ip => {
-                        console.log(`   https://${ip}:${httpsPort}/manifest.json`);
-                    });
-                } else {
-                    console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
-                    console.log(`   (Replace YOUR_IP with your device's IP address)`);
-                }
-                console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
-                console.log(`   This is normal for local development. You can safely proceed.`);
-            });
-        } catch (error) {
-            console.error('❌ Failed to start HTTPS server:', error);
-            console.error('⚠️  HTTP server continues running for localhost access');
-        }
     }
     
     console.log(`📊 Database ready: ${databaseReady}`);

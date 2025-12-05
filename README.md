@@ -97,8 +97,7 @@ Edit the `config.json` file and fill in your credentials:
     "userAgent": "Stremula1/3.0 (by u/YOUR_REDDIT_USERNAME)"
   },
   "server": {
-    "port": 7003,
-    "publicBaseUrl": ""
+    "port": 7003
   },
   "fetcher": {
     "intervalMinutes": 15,
@@ -116,10 +115,6 @@ Edit the `config.json` file and fill in your credentials:
   - `reddit.username`: Your Reddit username
   - `reddit.password`: Your Reddit password
   - `reddit.userAgent`: Should match your Reddit username (e.g., if your username is `yourusername`, use `"Stremula1/3.0 (by u/yourusername)"`). This is required by Reddit's API.
-- **`publicBaseUrl`**: 
-  - Leave empty (`""`) if running locally (will auto-detect from requests)
-  - Set to your public URL (e.g., `"https://YOUR_IP:7004"` for IP access or `"https://yourdomain.com"` for public server) if accessing from other devices on your network or the internet
-  - This is used for serving media files (posters, thumbnails) to Stremio clients
 - The `intervalMinutes` setting controls how often the fetcher checks for new posts (default: 15 minutes)
 
 ### Step 4: Initialize the Database
@@ -147,8 +142,7 @@ The output will be color-coded so you can easily see which service is logging wh
 **What each service does:**
 
 **Stremio Server:**
-- Starts HTTP server on port 7003 (or configured port) for localhost access (127.0.0.1)
-- Starts HTTPS server on port 7004 (or configured port + 1) for IP address access (with self-signed certificate)
+- Starts HTTP server on port 7003 (or configured port) for local network access
 - Serves content from the database
 - Ready immediately (no startup delay)
 - **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
@@ -320,29 +314,14 @@ npm run fetch24p  # Same as: node cli.js --fetch24p
 2. Go to Addons → Community Addons
 3. Click the "+" button
 4. Enter your addon URL:
-   - **Localhost**: `http://localhost:7003/manifest.json` or `http://127.0.0.1:7003/manifest.json`
-   - **Network IP**: `https://YOUR_IP:7004/manifest.json` (note: port 7004 for HTTPS)
-   - **Public server**: `https://YOUR_DOMAIN:7003/manifest.json`
+   - **Same device (localhost)**: `http://localhost:7003/manifest.json` or `http://127.0.0.1:7003/manifest.json`
+   - **Local network (other devices)**: `http://YOUR_IP:7003/manifest.json` (replace YOUR_IP with your server's local IP address)
 
-**Note:** 
-- **Localhost** uses HTTP on port 7003 (Stremio allows HTTP for 127.0.0.1)
-- **IP addresses** require HTTPS on port 7004 with a self-signed certificate. When accessing via IP, your browser may show a "Website is not secure" warning. This is normal and safe for local use. To proceed:
-  1. Open the addon URL directly in your browser (e.g., `https://YOUR_IP:7004/manifest.json`)
-  2. Click "Advanced" or "Show Details" on the security warning
-  3. Click "Proceed" or "Accept the Risk and Continue"
-  4. Then add the addon in Stremio
-  
-  This only needs to be done once per browser session.
+**Note:** The server uses HTTP only and is accessible on your local network. Make sure your device is on the same network as the server.
 
-## 🌐 Connecting from Another Network
+## 🌐 Connecting from Another Device on Your Local Network
 
-The server automatically starts two services:
-- **HTTP server** on port 7003 (localhost only - `127.0.0.1`)
-- **HTTPS server** on port 7004 (network access - `0.0.0.0`)
-
-### Scenario 1: Same Local Network (WiFi/LAN)
-
-If you want to access the addon from another device on the same network (e.g., your phone, tablet, or another computer):
+The server runs on HTTP and is accessible on your local network. To access from another device (e.g., your phone, tablet, or another computer):
 
 1. **Find your server's local IP address:**
    ```bash
@@ -357,102 +336,22 @@ If you want to access the addon from another device on the same network (e.g., y
    ```
    Example: `192.168.1.118`
 
-2. **Use the HTTPS URL in Stremio:**
+2. **Use the HTTP URL in Stremio:**
    ```
-   https://192.168.1.118:7004/manifest.json
+   http://192.168.1.118:7003/manifest.json
    ```
    (Replace with your actual IP address)
 
-3. **Optional: Set `publicBaseUrl` in config.json:**
-   ```json
-   "server": {
-     "port": 7003,
-     "publicBaseUrl": "https://192.168.1.118:7004"
-   }
-   ```
-   This ensures media files (posters, thumbnails) use the correct URL.
-
-4. **Handle the security warning:**
-   - Your browser will show a "Website is not secure" warning (this is normal for self-signed certificates)
-   - Click "Advanced" → "Proceed" or "Accept the Risk"
-   - This is safe for local network use
-
-### Scenario 2: Different Network (Internet Access)
-
-To access from outside your local network (e.g., from work, a friend's house, or mobile data):
-
-1. **Find your public IP address:**
-   ```bash
-   curl ifconfig.me
-   ```
-   Example: `203.0.113.42`
-
-2. **Configure Router Port Forwarding:**
-   - Log into your router's admin panel (usually `192.168.1.1` or `192.168.0.1`)
-   - Navigate to "Port Forwarding" or "Virtual Server" settings
-   - Add a new rule:
-     - **External Port**: `7004`
-     - **Internal IP**: Your server's local IP (e.g., `192.168.1.118`)
-     - **Internal Port**: `7004`
-     - **Protocol**: `TCP`
-   - Save the configuration
-
-3. **Configure Firewall (if enabled):**
-   ```bash
-   # On macOS (if firewall is enabled)
-   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/local/bin/node
-   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/local/bin/node
-   
-   # On Linux (using ufw)
-   sudo ufw allow 7004/tcp
-   
-   # On Raspberry Pi
-   sudo ufw allow 7004/tcp
-   ```
-
-4. **Update config.json:**
-   ```json
-   "server": {
-     "port": 7003,
-     "publicBaseUrl": "https://203.0.113.42:7004"
-   }
-   ```
-   (Replace with your actual public IP)
-
-5. **Use the public IP URL in Stremio:**
-   ```
-   https://203.0.113.42:7004/manifest.json
-   ```
-   (Replace with your actual public IP)
-
-6. **Note about Dynamic IPs:**
-   - Most home internet connections have dynamic IPs that change periodically
-   - Consider using a Dynamic DNS service (e.g., DuckDNS, No-IP) if your IP changes frequently
-   - Or check your public IP before connecting each time
-
-### 🔒 Self-Signed Certificate Warnings
-
-**Security Warning:**
-- The HTTPS server uses a self-signed certificate for convenience
-- Browsers will show security warnings - this is **normal and expected**
-- For local network use, this is perfectly safe
-- For production/public servers, consider using Let's Encrypt or a proper SSL certificate
+3. **Make sure both devices are on the same network:**
+   - Both your server and the device running Stremio must be on the same WiFi/LAN network
 
 ### 🧪 Testing Your Connection
 
 **Test from the same network:**
 ```bash
 # Replace with your server's local IP
-curl -k https://192.168.1.118:7004/manifest.json
+curl http://192.168.1.118:7003/manifest.json
 ```
-
-**Test from a different network:**
-```bash
-# Replace with your public IP
-curl -k https://YOUR_PUBLIC_IP:7004/manifest.json
-```
-
-The `-k` flag ignores SSL certificate warnings (required for self-signed certs).
 
 If you see JSON output, the server is accessible!
 
@@ -467,11 +366,6 @@ If you see JSON output, the server is accessible!
 - **reddit.username**: Your Reddit username (required)
 - **reddit.password**: Your Reddit password (required)
 - **server.port**: Port for the Stremio server (default: 7003)
-- **server.publicBaseUrl**: 
-  - Leave empty (`""`) for local use (will auto-detect from requests)
-  - Set to your IP address with HTTPS (e.g., `"https://YOUR_IP:7004/manifest.json"`) if accessing from other devices on your network
-  - Set to your domain (e.g., `"https://yourdomain.com"`) if running on a public server
-  - This URL is used to serve media files (posters, thumbnails) to Stremio clients
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
 - **fetcher.maxScrollMonths**: How far back to search for posts (default: 3)
 
@@ -582,6 +476,12 @@ The built-in auto-restart works independently and provides immediate recovery, w
 - Verify u/egortech is still posting Formula 1 content
 - Check server logs for authentication errors
 
+### Can't access from another device on local network
+- Make sure both devices are on the same WiFi/LAN network
+- Check that the server is running: `curl http://localhost:7003/manifest.json`
+- Verify firewall allows connections on port 7003
+- Try accessing from the same device first to verify the server works
+
 ### Torrent downloads taking too long or getting stuck
 - The fetcher now uses a 1-minute timeout for new Real Debrid torrent downloads (reduced from 5 minutes)
 - For existing torrents that are still downloading, the fetcher will:
@@ -617,11 +517,11 @@ The built-in auto-restart works independently and provides immediate recovery, w
 The server runs on port 7003 by default. You can check if it's running:
 
 ```bash
-# For localhost (HTTP on port 7003)
+# For localhost
 curl http://localhost:7003/manifest.json
 
-# For IP address (HTTPS on port 7004 with self-signed cert)
-curl https://YOUR_IP:7004/manifest.json -k
+# For local network IP
+curl http://YOUR_IP:7003/manifest.json
 ```
 
 ### Check Database
