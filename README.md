@@ -13,6 +13,7 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 - **Session Detection**: Automatically detects Practice, Qualifying, Sprint, and Race sessions
 - **Quality Selection**: 4K and 1080p options when available
 - **Automatic Year Overwrite**: When new season posts are found (e.g., 2026), old season posts (e.g., 2025) with the same Grand Prix name are automatically overwritten with fresh data
+- **Auto-Updater**: Automatically checks GitHub for updates, pulls them, and restarts the service (configurable)
 
 ## 📋 Requirements
 
@@ -44,6 +45,18 @@ The addon uses Reddit's official API to avoid blocking issues.
 - npm (comes with Node.js)
 
 ## ⚙️ Installation & Setup
+
+### Step 0: Get the Project
+
+**If you haven't already, download the project from GitHub:**
+
+```bash
+# Clone the repository (recommended - automatically sets up git remote for auto-updater)
+git clone https://github.com/YOUR_USERNAME/stremula-1.git
+cd stremula-1
+```
+
+**Note:** Using `git clone` automatically configures the git remote, which enables the auto-updater feature. If you download the project as a ZIP file or copy it manually, you'll need to set up the git remote manually (see the auto-updater section for details).
 
 ### Step 1: Install Dependencies
 
@@ -289,6 +302,11 @@ node cli.js --fetch2p
   - This URL is used to serve media files (posters, thumbnails) to Stremio clients
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
 - **fetcher.maxScrollMonths**: How far back to search for posts (default: 3)
+- **updater.enabled**: Enable automatic updates from GitHub (default: true)
+- **updater.checkIntervalHours**: How often to check for updates (default: 6)
+- **updater.autoPull**: Automatically pull updates when found (default: true)
+- **updater.autoRestart**: Automatically restart after pulling updates (default: true)
+- **updater.branch**: Git branch to check for updates (default: "main")
 
 ### Environment Variables
 
@@ -373,6 +391,87 @@ For production deployments, it's recommended to also use:
 
 The built-in auto-restart works independently and provides immediate recovery, while systemd/PM2 provides additional protection for system-level failures.
 
+## 🔄 Auto-Updater Functionality
+
+Both the server and fetcher service include built-in auto-updater functionality that automatically checks GitHub for updates and applies them:
+
+### How It Works
+
+- **Automatic Checking**: Periodically checks GitHub for new commits on the configured branch (default: every 6 hours)
+- **Smart Detection**: Only pulls updates when new commits are available (compares commit hashes)
+- **Automatic Updates**: When updates are found:
+  1. Fetches the latest changes from GitHub
+  2. Pulls the updates using `git pull`
+  3. Automatically runs `npm install` if `package.json` or `package-lock.json` changed
+  4. Restarts the service to apply the updates
+- **First Check Delay**: Waits 1 minute after service start before the first check (allows service to start properly)
+- **Git Repository Required**: Only works if the project is in a git repository with a remote configured
+
+### Configuration
+
+The auto-updater can be configured in `config.json`:
+
+```json
+{
+  "updater": {
+    "enabled": true,
+    "checkIntervalHours": 6,
+    "autoPull": true,
+    "autoRestart": true,
+    "branch": "main"
+  }
+}
+```
+
+**Options:**
+- **enabled**: Enable/disable auto-updater (default: `true`)
+- **checkIntervalHours**: How often to check for updates in hours (default: `6`)
+- **autoPull**: Automatically pull updates when found (default: `true`)
+- **autoRestart**: Automatically restart after pulling updates (default: `true`)
+- **branch**: Git branch to check for updates (default: `"main"`)
+
+### When Auto-Updater Helps
+
+- Automatic updates when you push to GitHub
+- Keeps the service running the latest version
+- No manual intervention needed for updates
+- Perfect for Raspberry Pi deployments
+
+### Important Notes
+
+1. **Git Remote Required**: The project must be a git repository with a remote (origin) configured
+2. **Network Access**: Requires internet connection to check GitHub
+3. **Authentication**: If your repository is private, ensure git credentials are configured (SSH keys or HTTPS credentials)
+4. **Merge Conflicts**: If local changes conflict with remote changes, the pull may fail (check logs)
+5. **Service Restart**: When updates are pulled, the service restarts automatically (brief downtime)
+6. **Branch Detection**: The updater automatically detects the current branch if not specified
+
+### Disabling Auto-Updater
+
+To disable auto-updates, set `enabled: false` in the updater configuration:
+
+```json
+{
+  "updater": {
+    "enabled": false
+  }
+}
+```
+
+Or remove the `updater` section entirely (defaults to enabled, but you can override).
+
+### Manual Updates
+
+You can still manually update at any time:
+
+```bash
+cd ~/stremula-1
+git pull
+npm install  # Only if package.json changed
+sudo systemctl restart stremula-server
+sudo systemctl restart stremula-fetcher
+```
+
 ## 🐛 Troubleshooting
 
 ### "Real Debrid not configured"
@@ -404,6 +503,14 @@ The built-in auto-restart works independently and provides immediate recovery, w
 - Check the logs to identify the root cause
 - Common issues: database corruption, network connectivity, API authentication failures
 - The service will stop restarting after 5 attempts in 60 seconds to prevent infinite loops
+
+### Auto-updater not working
+- Check that the project is in a git repository: `git status`
+- Verify remote is configured: `git remote -v`
+- Ensure you have network connectivity to GitHub
+- Check that git credentials are set up (for private repos)
+- Verify the branch name in config matches your current branch: `git branch`
+- Check logs for specific error messages
 
 ## 📊 Monitoring
 

@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
 const { getCertificates } = require('./cert-utils');
+const { scheduleUpdateChecks } = require('./updater');
 
 // Initialize database
 let databaseReady = false;
@@ -722,6 +723,12 @@ async function startServer() {
     
     console.log(`📊 Database ready: ${databaseReady}`);
     console.log(`🔄 Auto-restart enabled (max ${RESTART_CONFIG.maxRestarts} restarts per ${RESTART_CONFIG.restartWindowMs/1000}s)`);
+    
+    // Start auto-updater if enabled
+    const updaterConfig = config.updater || { enabled: false };
+    if (updaterConfig.enabled) {
+        scheduleUpdateChecks(updaterConfig, 'server');
+    }
 }
 
 if (require.main === module) {

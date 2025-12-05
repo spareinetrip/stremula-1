@@ -111,9 +111,30 @@ You should see versions like `v20.x.x` and `10.x.x`.
 
 ---
 
-## Part 4: Transferring Your Project to Raspberry Pi
+## Part 4: Downloading the Project from GitHub
 
-### Option A: Using SCP (Simple Copy) - Recommended
+### Using Git (Recommended)
+
+On your Raspberry Pi (via SSH):
+
+```bash
+# Navigate to home directory
+cd ~
+
+# Clone the repository (replace with your actual GitHub repo URL)
+git clone https://github.com/YOUR_USERNAME/stremula-1.git
+
+# Navigate into the project directory
+cd stremula-1
+```
+
+**Note:** Replace `https://github.com/YOUR_USERNAME/stremula-1.git` with your actual GitHub repository URL.
+
+**✅ Git remote automatically configured:** Using `git clone` automatically sets up the git remote, which means the auto-updater will work immediately without any additional setup.
+
+### Alternative: Using SCP (if you prefer manual transfer)
+
+If you haven't pushed your project to GitHub yet, you can copy it manually:
 
 From your **Mac Terminal** (not connected to Pi), navigate to your project directory and copy files:
 
@@ -127,23 +148,27 @@ cd "/Users/julien/Stremula 1"
 scp -r stremula-1 pi@192.168.1.100:~/
 ```
 
-**Enter your password when prompted.**
-
-### Option B: Using Git (if your project is in a repository)
-
-On your Raspberry Pi (via SSH):
+**Important Note:** If you use SCP or download the project as a ZIP file (instead of `git clone`), the git remote will NOT be automatically configured. The auto-updater requires a git remote to check for updates. To set it up:
 
 ```bash
-# Navigate to home directory
-cd ~
+# On your Raspberry Pi, navigate to the project
+cd ~/stremula-1
 
-# Clone your repository (replace with your actual repo URL)
-git clone YOUR_REPO_URL
+# Initialize git repository (if not already a git repo)
+git init
 
-# Or if you have it locally, you can set up a repo and push it
+# Add the remote (replace with your actual GitHub repo URL)
+git remote add origin https://github.com/YOUR_USERNAME/stremula-1.git
+
+# Verify it was added
+git remote -v
 ```
 
-### Option C: Using SFTP Client (GUI method)
+**Recommendation:** Using `git clone` (the first method) is recommended because it automatically sets up the remote, making the auto-updater work immediately.
+
+**Enter your password when prompted.**
+
+### Alternative: Using SFTP Client (GUI method)
 
 1. Download **FileZilla** or **Cyberduck** (free SFTP clients)
 2. Connect to your Pi:
@@ -158,6 +183,8 @@ git clone YOUR_REPO_URL
 ## Part 5: Installing and Configuring Stremula 1
 
 ### Step 1: Navigate to Project Directory
+
+If you used Git clone, you should already be in the project directory. If not, navigate to it:
 
 On your Raspberry Pi (via SSH):
 
@@ -372,12 +399,12 @@ sudo journalctl -u stremula-fetcher -f
 
 ### Updating Your Project
 
-If you make changes to the code:
+If you make changes to the code on GitHub:
 
 ```bash
 cd ~/stremula-1
 
-# Pull latest changes (if using git)
+# Pull latest changes from GitHub
 git pull
 
 # Reinstall dependencies (if package.json changed)

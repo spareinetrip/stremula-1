@@ -3,6 +3,7 @@ const { spawn } = require('child_process');
 const { fetchAndProcess } = require('./fetcher');
 const { getConfig } = require('./config');
 const db = require('./database');
+const { scheduleUpdateChecks } = require('./updater');
 
 // Auto-restart configuration
 const RESTART_CONFIG = {
@@ -190,6 +191,12 @@ async function startFetcherService() {
     console.log('✅ Fetcher service running. Press Ctrl+C to stop.');
     console.log(`⏰ Next fetch scheduled in ${intervalMinutes} minutes`);
     console.log(`🔄 Auto-restart enabled (max ${RESTART_CONFIG.maxRestarts} restarts per ${RESTART_CONFIG.restartWindowMs/1000}s)`);
+    
+    // Start auto-updater if enabled
+    const updaterConfig = config.updater || { enabled: false };
+    if (updaterConfig.enabled) {
+        scheduleUpdateChecks(updaterConfig, 'fetcher');
+    }
     
     // Keep the process alive
     process.on('SIGINT', () => {
