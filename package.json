@@ -1,0 +1,43 @@
+{
+  "name": "stremula-1",
+  "version": "3.0.0",
+  "description": "High-quality Sky Sports F1 replays with Real Debrid integration - Raspberry Pi optimized",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "fetcher": "node fetcher-service.js",
+    "fetch": "node cli.js",
+    "fetch1p": "node cli.js --fetch1p",
+    "fetch2p": "node cli.js --fetch2p",
+    "fetch3p": "node cli.js --fetch3p",
+    "fetch5p": "node cli.js --fetch5p",
+    "fetch10p": "node cli.js --fetch10p",
+    "fetch20p": "node cli.js --fetch20p",
+    "fetch24p": "node cli.js --fetch24p",
+    "reset-cache": "node cli.js --reset-cache",
+    "reset-all": "node cli.js --reset-all"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "sqlite3": "^5.1.6",
+    "stremio-addon-sdk": "^1.6.7"
+  },
+  "keywords": [
+    "stremio",
+    "addon",
+    "formula1",
+    "f1",
+    "real-debrid",
+    "streaming",
+    "raspberry-pi"
+  ],
+  "author": "Stremula Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
+
