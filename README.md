@@ -13,6 +13,7 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 - **Session Detection**: Automatically detects Practice, Qualifying, Sprint, and Race sessions
 - **Quality Selection**: 4K and 1080p options when available
 - **Automatic Year Overwrite**: When new season posts are found (e.g., 2026), old season posts (e.g., 2025) with the same Grand Prix name are automatically overwritten with fresh data
+- **Smart Torrent Handling**: Prevents getting stuck on slow Real Debrid downloads with 1-minute timeout and automatic retry logic
 - **Auto-Updater**: Automatically checks GitHub for updates, pulls them, and restarts the service (configurable)
 
 ## 📋 Requirements
@@ -326,7 +327,7 @@ export PORT=7003
 The plugin uses SQLite for storage. The database file is created at `stremula.db` in the plugin directory.
 
 **Database Structure:**
-- **processed_posts**: Tracks which Reddit posts have been processed
+- **processed_posts**: Tracks which Reddit posts have been processed, including torrent status and retry tracking
 - **f1_weekends**: Stores F1 weekend information
 - **sessions**: Stores individual session data (Practice, Qualifying, Race, etc.)
 - **streaming_links**: Stores Real Debrid streaming links for each session
@@ -335,6 +336,7 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 - Faster subsequent fetches
 - No duplicate Real Debrid conversions
 - Historical data is preserved
+- Torrent download status is tracked to avoid retrying slow downloads
 
 ## 🔄 How It Works
 
@@ -348,7 +350,13 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
        - Only deletes weekends from the previous year, never from the same year (safe for multiple posts per Grand Prix)
        - Future-proof: Works for any year transition (2025→2026, 2026→2027, etc.)
      - Extracts magnet link and session information
-     - Converts magnet link to Real Debrid streaming links
+     - **Smart Torrent Handling**: 
+       - Checks if the magnet link was recently attempted and is still downloading (within last 30 minutes)
+       - If still downloading, skips it and moves to the next post
+       - If not recently attempted, converts magnet link to Real Debrid streaming links
+       - Waits up to 1 minute for Real Debrid to download the torrent (reduced from 5 minutes to prevent getting stuck)
+       - If still downloading after 1 minute, saves the status and moves on (will retry later)
+       - Tracks torrent status in the database to avoid repeated attempts
      - Saves everything to the database
    - Stops that fetch round when it finds a weekend that is fully processed (both 1080p and 2160p posts have all required sessions)
    - Returns normally and waits for the next scheduled fetch
@@ -487,6 +495,16 @@ sudo systemctl restart stremula-fetcher
 - Check Reddit API credentials are working
 - Verify u/egortech is still posting Formula 1 content
 - Check server logs for authentication errors
+
+### Torrent downloads taking too long or getting stuck
+- The fetcher now uses a 1-minute timeout for Real Debrid torrent downloads (reduced from 5 minutes)
+- If a torrent is still downloading after 1 minute, the fetcher will:
+  - Save the torrent status to the database
+  - Move on to the next post
+  - Skip that magnet link for 30 minutes to avoid repeated attempts
+  - Retry automatically on the next fetch cycle
+- This prevents the script from getting stuck on slow downloads
+- You'll see messages like "⏰ Timeout waiting for torrent..." and "⏭️ Skipping... still downloading from previous attempt" in the logs
 
 ### Database errors
 - Ensure the plugin directory is writable
