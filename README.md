@@ -14,7 +14,7 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 - **Quality Selection**: 4K and 1080p options when available
 - **Automatic Year Overwrite**: When new season posts are found (e.g., 2026), old season posts (e.g., 2025) with the same Grand Prix name are automatically overwritten with fresh data
 - **Smart Torrent Handling**: Prevents getting stuck on slow Real Debrid downloads with 1-minute timeout and automatic retry logic
-- **Auto-Updater**: Automatically checks GitHub for updates, pulls them, and restarts the service (configurable)
+- **Auto-Updater**: Automatically checks GitHub for updates after each fetch completes, pulls them, and restarts the service (never conflicts with fetcher operations)
 
 ## 📋 Requirements
 
@@ -107,7 +107,6 @@ Edit the `config.json` file and fill in your credentials:
   },
   "updater": {
     "enabled": true,
-    "checkIntervalHours": 6,
     "autoPull": true,
     "autoRestart": true,
     "branch": "main"
@@ -483,7 +482,6 @@ If you see JSON output, the server is accessible!
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
 - **fetcher.maxScrollMonths**: How far back to search for posts (default: 3)
 - **updater.enabled**: Enable automatic updates from GitHub (default: true)
-- **updater.checkIntervalHours**: How often to check for updates (default: 6)
 - **updater.autoPull**: Automatically pull updates when found (default: true)
 - **updater.autoRestart**: Automatically restart after pulling updates (default: true)
 - **updater.branch**: Git branch to check for updates (default: "main")
@@ -581,18 +579,19 @@ The built-in auto-restart works independently and provides immediate recovery, w
 
 ## 🔄 Auto-Updater Functionality
 
-Both the server and fetcher service include built-in auto-updater functionality that automatically checks GitHub for updates and applies them:
+The fetcher service includes built-in auto-updater functionality that automatically checks GitHub for updates and applies them **after each fetch completes**. This ensures updates never conflict with fetcher operations.
 
 ### How It Works
 
-- **Automatic Checking**: Periodically checks GitHub for new commits on the configured branch (default: every 6 hours)
+- **Automatic Checking**: Checks GitHub for new commits **after each fetch completes** (not on a separate schedule)
+- **No Conflicts**: Updates only run when the fetcher is idle, preventing any interference with fetch operations
 - **Smart Detection**: Only pulls updates when new commits are available (compares commit hashes)
 - **Automatic Updates**: When updates are found:
   1. Fetches the latest changes from GitHub
   2. Pulls the updates using `git pull`
   3. Automatically runs `npm install` if `package.json` or `package-lock.json` changed
-  4. Restarts the service to apply the updates
-- **First Check Delay**: Waits 1 minute after service start before the first check (allows service to start properly)
+  4. Restarts the entire service (both server and fetcher) to apply the updates
+- **Coordinated Restarts**: Uses a file-based lock to prevent both processes from restarting simultaneously
 - **Git Repository Required**: Only works if the project is in a git repository with a remote configured
 
 ### Configuration
@@ -603,7 +602,6 @@ The auto-updater can be configured in `config.json`:
 {
   "updater": {
     "enabled": true,
-    "checkIntervalHours": 6,
     "autoPull": true,
     "autoRestart": true,
     "branch": "main"
@@ -613,10 +611,14 @@ The auto-updater can be configured in `config.json`:
 
 **Options:**
 - **enabled**: Enable/disable auto-updater (default: `true`)
-- **checkIntervalHours**: How often to check for updates in hours (default: `6`)
 - **autoPull**: Automatically pull updates when found (default: `true`)
 - **autoRestart**: Automatically restart after pulling updates (default: `true`)
 - **branch**: Git branch to check for updates (default: `"main"`)
+
+**Note:** Updates are checked after each fetch completes (both initial fetch and scheduled fetches). This means:
+- If fetches run every 10 minutes, updates are checked every 10 minutes (after each fetch)
+- Updates never interrupt fetcher operations
+- No separate scheduling needed
 
 ### When Auto-Updater Helps
 
@@ -631,8 +633,10 @@ The auto-updater can be configured in `config.json`:
 2. **Network Access**: Requires internet connection to check GitHub
 3. **Authentication**: If your repository is private, ensure git credentials are configured (SSH keys or HTTPS credentials)
 4. **Merge Conflicts**: If local changes conflict with remote changes, the pull may fail (check logs)
-5. **Service Restart**: When updates are pulled, the service restarts automatically (brief downtime)
+5. **Service Restart**: When updates are pulled, the entire service (both server and fetcher) restarts automatically (brief downtime)
 6. **Branch Detection**: The updater automatically detects the current branch if not specified
+7. **Update Timing**: Updates are checked after each fetch completes, so the frequency depends on your `fetcher.intervalMinutes` setting
+8. **No Conflicts**: Updates never run while fetches are in progress, ensuring data integrity
 
 ### Disabling Auto-Updater
 

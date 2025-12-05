@@ -6,4 +6,5 @@ config.json
 *.log
 .env
 certs/
+.restart-lock
 

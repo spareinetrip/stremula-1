@@ -26,7 +26,6 @@ const DEFAULT_CONFIG = {
     },
     updater: {
         enabled: true,
-        checkIntervalHours: 6,
         autoPull: true,
         autoRestart: true,
         branch: 'main'

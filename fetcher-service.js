@@ -3,7 +3,7 @@ const { spawn } = require('child_process');
 const { fetchAndProcess } = require('./fetcher');
 const { getConfig } = require('./config');
 const db = require('./database');
-const { scheduleUpdateChecks } = require('./updater');
+const { checkForUpdates } = require('./updater');
 
 // Auto-restart configuration
 const RESTART_CONFIG = {
@@ -167,6 +167,13 @@ async function startFetcherService() {
     console.log('\n🚀 Running initial fetch...');
     try {
         await fetchAndProcess();
+        
+        // Check for updates after initial fetch completes
+        const updaterConfig = config.updater || { enabled: false };
+        if (updaterConfig.enabled) {
+            console.log('\n🔍 Checking for updates after initial fetch completion...');
+            await checkForUpdates(updaterConfig, 'fetcher');
+        }
     } catch (error) {
         console.error('❌ Initial fetch failed:', error);
     }
@@ -177,6 +184,13 @@ async function startFetcherService() {
         try {
             const result = await fetchAndProcess();
             console.log(`⏰ Next fetch scheduled in ${intervalMinutes} minutes`);
+            
+            // Check for updates after fetch completes (only when fetcher is idle)
+            const updaterConfig = config.updater || { enabled: false };
+            if (updaterConfig.enabled) {
+                console.log('\n🔍 Checking for updates after fetch completion...');
+                await checkForUpdates(updaterConfig, 'fetcher');
+            }
         } catch (error) {
             console.error('❌ Scheduled fetch failed:', error);
             console.error('Stack:', error.stack);
@@ -192,11 +206,8 @@ async function startFetcherService() {
     console.log(`⏰ Next fetch scheduled in ${intervalMinutes} minutes`);
     console.log(`🔄 Auto-restart enabled (max ${RESTART_CONFIG.maxRestarts} restarts per ${RESTART_CONFIG.restartWindowMs/1000}s)`);
     
-    // Start auto-updater if enabled
-    const updaterConfig = config.updater || { enabled: false };
-    if (updaterConfig.enabled) {
-        scheduleUpdateChecks(updaterConfig, 'fetcher');
-    }
+    // Note: Auto-updater now runs after each fetch completes (not on a schedule)
+    // This ensures updates only happen when fetcher is idle
     
     // Keep the process alive
     process.on('SIGINT', () => {
