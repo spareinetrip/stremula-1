@@ -651,6 +651,37 @@ sudo journalctl -u stremula-fetcher -f
 sudo journalctl -u stremula -f
 ```
 
+## 🔄 Manual Updates
+
+To manually update your installation when new code is pushed to GitHub:
+
+```bash
+# Navigate to your project directory
+cd ~/stremula-1
+# or if installed in /opt:
+cd /opt/stremula-1
+
+# Pull latest changes from GitHub
+git pull
+
+# Reinstall dependencies (only if package.json changed)
+npm install
+
+# Restart services to apply changes
+# If using separate systemd services:
+sudo systemctl restart stremula-server
+sudo systemctl restart stremula-fetcher
+
+# If using single systemd service:
+sudo systemctl restart stremula
+
+# If running manually (not as a service):
+# Press Ctrl+C to stop, then run:
+npm start
+```
+
+**Note:** You only need to run `npm install` if `package.json` or `package-lock.json` changed in the update. The `git pull` command will show you which files changed.
+
 ## 🔐 Security Notes
 
 - **Never commit `config.json`** with real credentials to version control
