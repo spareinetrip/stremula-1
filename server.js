@@ -1,11 +1,16 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
+const https = require('https');
 const path = require('path');
 const { getConfig } = require('./config');
 const db = require('./database');
+const { getCertificates } = require('./cert-utils');
 
 // Initialize database
 let databaseReady = false;
+
+// Dynamic base URL - updated from requests
+let dynamicBaseUrl = null;
 
 // Helper function to convert slug to GP name
 function slugToGpName(slug) {
@@ -113,11 +118,17 @@ function getPosterForGrandPrix(gpName) {
 
 function getPublicBaseUrl() {
     const config = getConfig();
+    // Use configured base URL if set
     if (config.server.publicBaseUrl) {
         return config.server.publicBaseUrl;
     }
+    // Use dynamically detected base URL from requests
+    if (dynamicBaseUrl) {
+        return dynamicBaseUrl;
+    }
+    // Fallback to localhost
     const port = config.server.port || 7003;
-    return `http://localhost:${port}`;
+    return `https://localhost:${port}`;
 }
 
 // Addon Manifest
@@ -412,13 +423,16 @@ async function startServer() {
     const port = config.server.port || 7003;
     const app = express();
     
-    // Dynamic base URL detection
-    let publicBaseUrl = config.server.publicBaseUrl || `http://localhost:${port}`;
+    // Dynamic base URL detection from requests
     app.use((req, _res, next) => {
         try {
-            const proto = (req.headers['x-forwarded-proto'] || '').toString().split(',')[0] || req.protocol || 'http';
+            const proto = (req.headers['x-forwarded-proto'] || '').toString().split(',')[0] || 'https';
             const host = req.headers.host;
-            if (host) publicBaseUrl = `${proto}://${host}`;
+            if (host) {
+                // Update dynamic base URL based on the request
+                // This ensures images use the correct host (IP or localhost)
+                dynamicBaseUrl = `${proto}://${host}`;
+            }
         } catch (_e) {}
         next();
     });
@@ -430,11 +444,58 @@ async function startServer() {
     const router = getRouter({ manifest, get: builder.getInterface().get });
     app.use('/', router);
     
-    // Start listening
-    app.listen(port, '0.0.0.0', () => {
-        console.log(`\n🚀 Stremula 1 Addon server running on port ${port}`);
-        console.log(`📡 Install in Stremio: ${publicBaseUrl}/manifest.json`);
+    // Get SSL certificates for HTTPS (required)
+    let sslOptions;
+    try {
+        sslOptions = await getCertificates();
+    } catch (error) {
+        console.error('❌ Failed to load SSL certificates:', error.message);
+        console.error('   HTTPS is required for Stremio addons. Exiting...');
+        process.exit(1);
+    }
+    
+    // Start HTTPS server
+    const httpsServer = https.createServer(sslOptions, app);
+    httpsServer.listen(port, '0.0.0.0', () => {
+        console.log(`\n🚀 Stremula 1 Addon server running on HTTPS port ${port}`);
+        
+        // Get local IP addresses for display
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        const ips = [];
+        for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    ips.push(iface.address);
+                }
+            }
+        }
+        
+        if (ips.length > 0) {
+            console.log(`📡 Install in Stremio (via IP):`);
+            ips.forEach(ip => {
+                console.log(`   https://${ip}:${port}/manifest.json`);
+            });
+        } else {
+            console.log(`📡 Install in Stremio: https://YOUR_IP:${port}/manifest.json`);
+            console.log(`   (Replace YOUR_IP with your MacBook's IP address)`);
+        }
+        console.log(`📡 Install in Stremio (localhost): https://localhost:${port}/manifest.json`);
         console.log(`📊 Database ready: ${databaseReady}`);
+        console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
+        console.log(`   This is normal for local development. You can safely proceed.`);
+    });
+    
+    // Handle server errors
+    httpsServer.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+            console.error(`\n❌ Port ${port} is already in use.`);
+            console.error(`   Please stop the other process or use a different port.`);
+            console.error(`   To find and kill the process: kill -9 $(lsof -ti:${port})`);
+        } else {
+            console.error('❌ HTTPS server error:', error);
+        }
+        process.exit(1);
     });
 }
 

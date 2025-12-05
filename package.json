@@ -22,6 +22,7 @@
     "cheerio": "^1.0.0-rc.12",
     "express": "^4.18.2",
     "node-cron": "^3.0.3",
+    "selfsigned": "^5.2.0",
     "sqlite3": "^5.1.6",
     "stremio-addon-sdk": "^1.6.7"
   },
@@ -40,4 +41,3 @@
     "node": ">=16.0.0"
   }
 }
-

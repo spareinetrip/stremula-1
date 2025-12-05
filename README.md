@@ -84,8 +84,8 @@ Edit the `config.json` file and fill in your credentials:
 - Replace all `YOUR_*` placeholders with your actual credentials
 - **`userAgent`**: Should match your Reddit username (e.g., if your username is `yourusername`, use `"Stremula1/3.0 (by u/yourusername)"`). This is required by Reddit's API.
 - **`publicBaseUrl`**: 
-  - Leave empty (`""`) if running locally on your Raspberry Pi
-  - Set to your public URL (e.g., `"http://192.168.1.100:7003"` or `"https://yourdomain.com"`) if accessing from other devices on your network or the internet
+  - Leave empty (`""`) if running locally (will auto-detect from requests)
+  - Set to your public URL (e.g., `"https://192.168.1.100:7003"` or `"https://yourdomain.com"`) if accessing from other devices on your network or the internet
   - This is used for serving media files (posters, thumbnails) to Stremio clients
 - The `intervalMinutes` setting controls how often the fetcher checks for new posts (default: 15 minutes)
 
@@ -252,9 +252,18 @@ node cli.js --fetch2p
 2. Go to Addons → Community Addons
 3. Click the "+" button
 4. Enter your addon URL:
-   - **Local**: `http://localhost:7003/manifest.json`
-   - **Raspberry Pi on network**: `http://YOUR_PI_IP:7003/manifest.json`
-   - **Public server**: `http://YOUR_DOMAIN:7003/manifest.json`
+   - **Local**: `https://localhost:7003/manifest.json`
+   - **Network IP**: `https://YOUR_IP:7003/manifest.json`
+   - **Public server**: `https://YOUR_DOMAIN:7003/manifest.json`
+
+**Note:** The addon uses HTTPS with a self-signed certificate for local development. When accessing via IP address, your browser may show a "Website is not secure" warning. This is normal and safe for local use. To proceed:
+
+1. Open the addon URL directly in your browser (e.g., `https://192.168.1.118:7003/manifest.json`)
+2. Click "Advanced" or "Show Details" on the security warning
+3. Click "Proceed" or "Accept the Risk and Continue"
+4. Then add the addon in Stremio
+
+This only needs to be done once per browser session.
 
 ## 🔧 Configuration Options
 
@@ -268,8 +277,8 @@ node cli.js --fetch2p
 - **reddit.password**: Your Reddit password (required)
 - **server.port**: Port for the Stremio server (default: 7003)
 - **server.publicBaseUrl**: 
-  - Leave empty (`""`) for local use
-  - Set to your Raspberry Pi's IP address (e.g., `"http://192.168.1.100:7003"`) if accessing from other devices on your network
+  - Leave empty (`""`) for local use (will auto-detect from requests)
+  - Set to your IP address (e.g., `"https://192.168.1.100:7003"`) if accessing from other devices on your network
   - Set to your domain (e.g., `"https://yourdomain.com"`) if running on a public server
   - This URL is used to serve media files (posters, thumbnails) to Stremio clients
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
@@ -356,7 +365,7 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 The server runs on port 7003 by default. You can check if it's running:
 
 ```bash
-curl http://localhost:7003/manifest.json
+curl https://localhost:7003/manifest.json -k
 ```
 
 ### Check Database
