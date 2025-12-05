@@ -90,6 +90,13 @@ Edit the `config.json` file and fill in your credentials:
   "fetcher": {
     "intervalMinutes": 15,
     "maxScrollMonths": 3
+  },
+  "updater": {
+    "enabled": true,
+    "checkIntervalHours": 6,
+    "autoPull": true,
+    "autoRestart": true,
+    "branch": "main"
   }
 }
 ```
