@@ -539,34 +539,89 @@ function shutdownServers(callback) {
     }, 10000);
 }
 
-// Restart the server process
+// Check if running under concurrently
+function isRunningUnderConcurrently() {
+    try {
+        // Check parent process command
+        const ppid = process.ppid;
+        if (ppid) {
+            try {
+                // Try to read parent process command on Unix systems
+                const fs = require('fs');
+                const parentCmd = fs.readFileSync(`/proc/${ppid}/cmdline`, 'utf8');
+                return parentCmd.includes('concurrently') || parentCmd.includes('npm');
+            } catch (e) {
+                // Fallback: check environment or process title
+                // If npm start was used, we're likely under concurrently
+                const npmCommand = process.env.npm_lifecycle_event;
+                return npmCommand === 'start';
+            }
+        }
+    } catch (error) {
+        // If we can't determine, assume we might be under concurrently if npm start
+        const npmCommand = process.env.npm_lifecycle_event;
+        return npmCommand === 'start';
+    }
+    return false;
+}
+
+// Restart the server process or entire npm start if under concurrently
 function restartServer() {
     console.log('🔄 Restarting server...');
     isRestarting = true;
 
-    // Use child_process to spawn a new instance
-    const args = process.argv.slice(1);
-    const child = spawn(process.execPath, args, {
-        stdio: 'inherit',
-        detached: false
-    });
+    // Check if we're running under concurrently (via npm start)
+    if (isRunningUnderConcurrently()) {
+        console.log('📦 Detected npm start (concurrently), restarting entire service...');
+        
+        // Restart the entire npm start process
+        // This ensures both server and fetcher restart together
+        const restartScript = process.platform === 'win32' 
+            ? 'npm.cmd' 
+            : 'npm';
+        
+        const child = spawn(restartScript, ['start'], {
+            stdio: 'inherit',
+            detached: true, // Detach so it continues after parent exits
+            cwd: __dirname,
+            shell: true
+        });
 
-    child.on('error', (error) => {
-        console.error('❌ Failed to restart server:', error);
-        process.exit(1);
-    });
+        child.on('error', (error) => {
+            console.error('❌ Failed to restart npm start:', error);
+            process.exit(1);
+        });
 
-    child.on('exit', (code) => {
-        if (code !== 0) {
-            console.error(`❌ Server restart process exited with code ${code}`);
-            process.exit(code);
-        }
-    });
+        // Give the new process a moment to start
+        setTimeout(() => {
+            console.log('✅ New process started, exiting current process...');
+            process.exit(0);
+        }, 2000);
+    } else {
+        // Running standalone, restart just this process
+        const args = process.argv.slice(1);
+        const child = spawn(process.execPath, args, {
+            stdio: 'inherit',
+            detached: false
+        });
 
-    // Exit current process after spawning new one
-    setTimeout(() => {
-        process.exit(0);
-    }, 1000);
+        child.on('error', (error) => {
+            console.error('❌ Failed to restart server:', error);
+            process.exit(1);
+        });
+
+        child.on('exit', (code) => {
+            if (code !== 0) {
+                console.error(`❌ Server restart process exited with code ${code}`);
+                process.exit(code);
+            }
+        });
+
+        // Exit current process after spawning new one
+        setTimeout(() => {
+            process.exit(0);
+        }, 1000);
+    }
 }
 
 // Start server
