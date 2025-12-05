@@ -15,6 +15,41 @@
 
 ## Solutions
 
+### ✅ Solution 0: Install Root CA Certificate (RECOMMENDED - No External Services)
+
+**This is the proper way to use self-signed certificates!** Create your own Certificate Authority and install it on your devices.
+
+**How it works:**
+1. Generate a Root CA on your Raspberry Pi
+2. Sign your server certificate with that CA
+3. Install the Root CA on iOS/tvOS devices
+4. Devices will trust any certificate signed by your CA
+
+**Setup:**
+```bash
+# On your Raspberry Pi
+npm run install-ca
+npm run serve-ca  # Optional: serves cert via HTTP
+```
+
+**Install on iOS:**
+1. Download the CA certificate (from email, HTTP server, or AirDrop)
+2. Install it: Settings → General → Profile → Install
+3. Enable trust: Settings → General → About → Certificate Trust Settings → Enable "Stremula Root CA"
+
+**Install on Apple TV:**
+- Use Apple Configurator or MDM (see `INSTALL_CA_CERTIFICATE.md` for details)
+
+**Benefits:**
+- ✅ No external services needed
+- ✅ Works completely offline
+- ✅ Proper certificate chain (like enterprise setups)
+- ✅ Free and private
+
+**See `INSTALL_CA_CERTIFICATE.md` for complete instructions.**
+
+---
+
 ### ✅ Solution 1: Cloudflare Tunnel (Recommended - FREE)
 
 Cloudflare Tunnel (formerly Argo Tunnel) provides a **free HTTPS endpoint** with a **valid SSL certificate** that iOS/Apple TV will trust.

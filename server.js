@@ -6,7 +6,22 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
-const { getCertificates } = require('./cert-utils');
+// Try to use CA-signed certificates first, fallback to self-signed
+let getCertificates;
+try {
+    const caUtils = require('./cert-ca-utils');
+    getCertificates = caUtils.getCertificates;
+    // Test if openssl is available (will fail gracefully if not)
+    require('child_process').execSync('which openssl', { stdio: 'ignore' });
+    console.log('✅ Using CA-signed certificates (for iOS/tvOS compatibility)');
+} catch (e) {
+    getCertificates = require('./cert-utils').getCertificates;
+    if (e.code === 'ENOENT' || e.message.includes('openssl')) {
+        console.log('⚠️  Using self-signed certificates (openssl not found - install with: sudo apt-get install openssl)');
+    } else {
+        console.log('⚠️  Using self-signed certificates (CA signing unavailable)');
+    }
+}
 
 // Initialize database
 let databaseReady = false;

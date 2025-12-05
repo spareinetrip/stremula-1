@@ -16,7 +16,9 @@
     "fetch20p": "node cli.js --fetch20p",
     "fetch24p": "node cli.js --fetch24p",
     "reset-cache": "node cli.js --reset-cache",
-    "reset-all": "node cli.js --reset-all"
+    "reset-all": "node cli.js --reset-all",
+    "install-ca": "node install-ca-cert.js",
+    "serve-ca": "node install-ca-cert.js --serve"
   },
   "dependencies": {
     "axios": "^1.6.0",
