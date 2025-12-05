@@ -37,6 +37,9 @@ function initDatabase() {
                     processed_at INTEGER NOT NULL,
                     is_fully_processed INTEGER DEFAULT 0,
                     magnet_link TEXT,
+                    torrent_id TEXT,
+                    torrent_status TEXT,
+                    torrent_last_checked INTEGER,
                     UNIQUE(post_id, quality)
                 )
             `, (err) => {
@@ -104,8 +107,18 @@ function initDatabase() {
                     console.error('❌ Error creating streaming_links table:', err);
                     reject(err);
                 } else {
-                    console.log('✅ Database tables initialized');
-                    resolve(db);
+                    // Migrate existing processed_posts table to add new columns if needed
+                    db.run(`ALTER TABLE processed_posts ADD COLUMN torrent_id TEXT`, (err) => {
+                        // Ignore error if column already exists
+                    });
+                    db.run(`ALTER TABLE processed_posts ADD COLUMN torrent_status TEXT`, (err) => {
+                        // Ignore error if column already exists
+                    });
+                    db.run(`ALTER TABLE processed_posts ADD COLUMN torrent_last_checked INTEGER`, (err) => {
+                        // Ignore error if column already exists
+                        console.log('✅ Database tables initialized');
+                        resolve(db);
+                    });
                 }
             });
         });
@@ -188,8 +201,8 @@ function markPostProcessed(postData) {
         getDatabase().then(db => {
             db.run(
                 `INSERT OR REPLACE INTO processed_posts 
-                 (post_id, post_url, title, quality, grand_prix_name, grand_prix_round, created_utc, processed_at, is_fully_processed, magnet_link)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 (post_id, post_url, title, quality, grand_prix_name, grand_prix_round, created_utc, processed_at, is_fully_processed, magnet_link, torrent_id, torrent_status, torrent_last_checked)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     postData.postId,
                     postData.postUrl,
@@ -200,7 +213,10 @@ function markPostProcessed(postData) {
                     postData.createdUtc,
                     Date.now(),
                     postData.isFullyProcessed ? 1 : 0,
-                    postData.magnetLink || null
+                    postData.magnetLink || null,
+                    postData.torrentId || null,
+                    postData.torrentStatus || null,
+                    postData.torrentLastChecked || null
                 ],
                 function(err) {
                     db.close();
@@ -793,6 +809,84 @@ function resetGrandPrix(grandPrixName, grandPrixRound) {
     });
 }
 
+// Check if a magnet link was recently attempted and is still downloading
+// Returns true if we should skip (recently attempted and still downloading)
+function shouldSkipMagnetLink(magnetLink, minWaitMinutes = 30) {
+    return new Promise((resolve, reject) => {
+        getDatabase().then(db => {
+            db.get(
+                `SELECT torrent_status, torrent_last_checked FROM processed_posts 
+                 WHERE magnet_link = ? AND torrent_status IS NOT NULL 
+                 ORDER BY torrent_last_checked DESC LIMIT 1`,
+                [magnetLink],
+                (err, row) => {
+                    db.close();
+                    if (err) {
+                        reject(err);
+                    } else if (!row) {
+                        // No previous attempt, don't skip
+                        resolve(false);
+                    } else {
+                        const lastChecked = row.torrent_last_checked || 0;
+                        const minutesSinceCheck = (Date.now() - lastChecked) / (1000 * 60);
+                        const isStillDownloading = row.torrent_status === 'downloading' || 
+                                                   row.torrent_status === 'queued' ||
+                                                   row.torrent_status === 'processing';
+                        
+                        // Skip if still downloading and checked recently (within minWaitMinutes)
+                        resolve(isStillDownloading && minutesSinceCheck < minWaitMinutes);
+                    }
+                }
+            );
+        }).catch(reject);
+    });
+}
+
+// Update torrent status for a post
+function updateTorrentStatus(postId, quality, torrentId, torrentStatus) {
+    return new Promise((resolve, reject) => {
+        getDatabase().then(db => {
+            db.run(
+                `UPDATE processed_posts 
+                 SET torrent_id = ?, torrent_status = ?, torrent_last_checked = ?
+                 WHERE post_id = ? AND quality = ?`,
+                [torrentId, torrentStatus, Date.now(), postId, quality],
+                function(err) {
+                    db.close();
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(this.changes > 0);
+                    }
+                }
+            );
+        }).catch(reject);
+    });
+}
+
+// Get torrent info for a post by magnet link
+function getTorrentInfoByMagnet(magnetLink) {
+    return new Promise((resolve, reject) => {
+        getDatabase().then(db => {
+            db.get(
+                `SELECT post_id, quality, torrent_id, torrent_status, torrent_last_checked 
+                 FROM processed_posts 
+                 WHERE magnet_link = ? AND torrent_id IS NOT NULL
+                 ORDER BY torrent_last_checked DESC LIMIT 1`,
+                [magnetLink],
+                (err, row) => {
+                    db.close();
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(row || null);
+                    }
+                }
+            );
+        }).catch(reject);
+    });
+}
+
 // Reset all cache/data (nuclear option)
 function resetAll() {
     return new Promise((resolve, reject) => {
@@ -861,6 +955,9 @@ module.exports = {
     getMostRecentPostTimestamp,
     resetProcessedPosts,
     resetGrandPrix,
-    resetAll
+    resetAll,
+    shouldSkipMagnetLink,
+    updateTorrentStatus,
+    getTorrentInfoByMagnet
 };
 

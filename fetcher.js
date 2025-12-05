@@ -521,7 +521,7 @@ async function getStreamingLinksFromTorrent(torrentInfo, apiKey) {
     }
 }
 
-async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey) {
+async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey, postId = null, quality = null) {
     if (!apiKey) {
         return null;
     }
@@ -529,13 +529,19 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey) {
     try {
         const existingTorrent = await checkExistingTorrent(magnetLink, apiKey);
         let torrentId;
+        let isNewTorrent = false;
         
         if (existingTorrent) {
             torrentId = existingTorrent.id;
             if (existingTorrent.status === 'downloaded') {
+                // Update database if we have post info
+                if (postId && quality) {
+                    await db.updateTorrentStatus(postId, quality, torrentId, 'downloaded');
+                }
                 return await getStreamingLinksFromTorrent(existingTorrent, apiKey);
             }
         } else {
+            isNewTorrent = true;
             try {
                 const addResponse = await axios.post(`${REALDEBRID_API_URL}/torrents/addMagnet`, {
                     magnet: magnetLink
@@ -567,29 +573,51 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey) {
             }
         }
         
-        // Wait for download to complete
+        // Wait for download to complete with shorter timeout
+        // Reduced from 30 attempts (5 minutes) to 6 attempts (1 minute)
+        // This prevents the script from getting stuck on slow downloads
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 6; // 1 minute total wait time (6 * 10 seconds)
+        let currentStatus = 'unknown';
         
         while (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 10000));
+            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
             
             const statusResponse = await axios.get(`${REALDEBRID_API_URL}/torrents/info/${torrentId}`, {
                 headers: { 'Authorization': `Bearer ${apiKey}` }
             });
             
             const torrentInfo = statusResponse.data;
+            currentStatus = torrentInfo.status;
             
-            if (torrentInfo.status === 'downloaded') {
+            // Update database with current status
+            if (postId && quality) {
+                await db.updateTorrentStatus(postId, quality, torrentId, currentStatus);
+            }
+            
+            if (currentStatus === 'downloaded') {
+                console.log(`✅ Torrent ${torrentId} downloaded successfully`);
                 return await getStreamingLinksFromTorrent(torrentInfo, apiKey);
-            } else if (torrentInfo.status === 'error' || torrentInfo.status === 'dead') {
+            } else if (currentStatus === 'error' || currentStatus === 'dead') {
+                console.log(`❌ Torrent ${torrentId} failed with status: ${currentStatus}`);
                 return null;
+            } else {
+                // Still downloading/processing - show progress
+                const progress = torrentInfo.progress !== undefined 
+                    ? Math.round(torrentInfo.progress * 100) 
+                    : 'unknown';
+                console.log(`⏳ Torrent ${torrentId} status: ${currentStatus} (${progress}%) - attempt ${attempts + 1}/${maxAttempts}`);
             }
             
             attempts++;
         }
         
-        return null;
+        // Timeout reached - torrent is still downloading
+        console.log(`⏰ Timeout waiting for torrent ${torrentId} to download (still ${currentStatus})`);
+        console.log(`   Will retry later - moving on to next post`);
+        
+        // Return a special object indicating it's still downloading
+        return { stillDownloading: true, torrentId, status: currentStatus };
     } catch (error) {
         console.error('Error converting magnet to Real-Debrid:', error.response?.data || error.message);
         return null;
@@ -815,6 +843,13 @@ async function processPost(post, config) {
         return null;
     }
     
+    // Check if this magnet link was recently attempted and is still downloading
+    const shouldSkip = await db.shouldSkipMagnetLink(magnetLink, 30); // Skip if checked within last 30 minutes
+    if (shouldSkip) {
+        console.log(`⏭️  Skipping ${quality} magnet link for ${grandPrix.name} - still downloading from previous attempt`);
+        return { skipped: true, postId: post.id, quality, reason: 'still_downloading' };
+    }
+    
     const sessions = extractSessionsFromContent(postContent);
     if (sessions.length === 0) {
         return null;
@@ -833,9 +868,15 @@ async function processPost(post, config) {
         magnetLink: magnetLink
     });
     
-    // Convert magnet to streaming links
+    // Convert magnet to streaming links (pass postId and quality for tracking)
     console.log(`🔄 Converting ${quality} magnet link for ${grandPrix.name}...`);
-    const streamingLinks = await convertMagnetToRealDebridStreamingLinks(magnetLink, config.realdebrid.apiKey);
+    const streamingLinks = await convertMagnetToRealDebridStreamingLinks(magnetLink, config.realdebrid.apiKey, post.id, quality);
+    
+    // Check if torrent is still downloading
+    if (streamingLinks && streamingLinks.stillDownloading) {
+        console.log(`⏭️  Torrent still downloading for ${grandPrix.name} (${quality}), will retry later`);
+        return { skipped: true, postId: post.id, quality, reason: 'still_downloading', torrentId: streamingLinks.torrentId };
+    }
     
     if (!streamingLinks || streamingLinks.length === 0) {
         console.log(`❌ Failed to convert ${quality} magnet link for ${grandPrix.name}`);
