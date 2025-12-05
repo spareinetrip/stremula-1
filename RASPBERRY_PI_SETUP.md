@@ -220,20 +220,26 @@ nano config.json
 
 ### Step 4: Test the Installation
 
-Run the server to make sure everything works:
+Run both services to make sure everything works:
 
 ```bash
 npm start
 ```
 
-You should see:
+You should see output from both services:
+- **SERVER** (blue output) - Database initialization and server startup messages
+- **FETCHER** (green output) - Fetcher service startup and initial fetch
+
+Example output:
 ```
-✅ Database initialized
-🚀 Stremula 1 Addon server running on port 7003
-📡 Install in Stremio: http://192.168.1.100:7003/manifest.json
+[SERVER] ✅ Database initialized
+[SERVER] 🌐 HTTP server running on port 7003 (localhost only)
+[SERVER] 🔒 HTTPS server running on port 7004 (for IP access)
+[FETCHER] ✅ Database initialized for fetcher service
+[FETCHER] 🚀 Running initial fetch...
 ```
 
-**Press `Ctrl + C` to stop the server** (we'll set it up to run automatically next).
+**Press `Ctrl + C` to stop both services** (we'll set them up to run automatically next).
 
 ---
 
@@ -241,7 +247,66 @@ You should see:
 
 You want Stremula 1 to start automatically when your Pi boots. We'll use systemd (the service manager).
 
-### Step 1: Create Service Files
+You have two options: a single service that runs both components, or separate services for better monitoring. We recommend **Option B (separate services)** for production use.
+
+### Option A: Single Service (Simpler)
+
+This runs both the server and fetcher together in one service:
+
+```bash
+sudo nano /etc/systemd/system/stremula.service
+```
+
+**Paste this content** (adjust the path if your project is elsewhere):
+
+```ini
+[Unit]
+Description=Stremula 1 (Server + Fetcher)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/stremula-1
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save and exit (`Ctrl + X`, `Y`, `Enter`).
+
+Then enable and start:
+
+```bash
+# Reload systemd to recognize new service
+sudo systemctl daemon-reload
+
+# Enable service to start on boot
+sudo systemctl enable stremula
+
+# Start the service now
+sudo systemctl start stremula
+```
+
+**Check status:**
+```bash
+sudo systemctl status stremula
+```
+
+**View logs:**
+```bash
+sudo journalctl -u stremula -f
+```
+
+### Option B: Separate Services (Recommended for Production)
+
+This creates separate services for the server and fetcher, allowing independent monitoring and control:
+
+**Step 1: Create Service Files**
 
 Create the server service:
 
@@ -299,7 +364,7 @@ WantedBy=multi-user.target
 
 Save and exit.
 
-### Step 2: Enable and Start Services
+**Step 2: Enable and Start Services**
 
 ```bash
 # Reload systemd to recognize new services
@@ -314,7 +379,7 @@ sudo systemctl start stremula-server
 sudo systemctl start stremula-fetcher
 ```
 
-### Step 3: Check Service Status
+**Step 3: Check Service Status**
 
 ```bash
 # Check server status
@@ -324,7 +389,7 @@ sudo systemctl status stremula-server
 sudo systemctl status stremula-fetcher
 ```
 
-You should see `active (running)` in green.
+You should see `active (running)` in green for both services.
 
 **To view logs:**
 ```bash
@@ -336,6 +401,12 @@ sudo journalctl -u stremula-fetcher -f
 
 # Press Ctrl + C to exit log view
 ```
+
+**Why choose separate services?**
+- Monitor each service independently
+- Restart services individually if needed
+- See separate logs for easier debugging
+- Better control over each component
 
 ---
 
@@ -375,6 +446,8 @@ The addon should now appear in your Stremio library!
 
 ### Managing Services
 
+**If using separate services (Option B):**
+
 ```bash
 # Start services
 sudo systemctl start stremula-server
@@ -397,6 +470,25 @@ sudo journalctl -u stremula-server -f
 sudo journalctl -u stremula-fetcher -f
 ```
 
+**If using single service (Option A):**
+
+```bash
+# Start service
+sudo systemctl start stremula
+
+# Stop service
+sudo systemctl stop stremula
+
+# Restart service
+sudo systemctl restart stremula
+
+# Check status
+sudo systemctl status stremula
+
+# View logs
+sudo journalctl -u stremula -f
+```
+
 ### Updating Your Project
 
 If you make changes to the code on GitHub:
@@ -411,8 +503,12 @@ git pull
 npm install
 
 # Restart services
+# If using separate services:
 sudo systemctl restart stremula-server
 sudo systemctl restart stremula-fetcher
+
+# If using single service:
+sudo systemctl restart stremula
 ```
 
 ### Finding Your Pi's IP Address
@@ -449,12 +545,18 @@ curl http://YOUR_PI_IP:7003/manifest.json
 
 1. **Check the logs:**
    ```bash
+   # If using separate services:
    sudo journalctl -u stremula-server -n 50
+   sudo journalctl -u stremula-fetcher -n 50
+   
+   # If using single service:
+   sudo journalctl -u stremula -n 50
    ```
 
 2. **Check file paths:**
    - Make sure the `WorkingDirectory` in service files matches where you installed the project
    - Verify Node.js path: `which node` (should be `/usr/bin/node`)
+   - Verify npm path: `which npm` (should be `/usr/bin/npm` for single service option)
 
 3. **Check permissions:**
    ```bash

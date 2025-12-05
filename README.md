@@ -109,82 +109,116 @@ The database will be automatically created on first run. No manual setup needed!
 
 ## 🏃‍♂️ Running the Plugin
 
-The plugin consists of two components that should run simultaneously:
+The plugin consists of two components that run simultaneously: the Stremio server and the fetcher service.
 
-### 1. Stremio Server (Always Running)
+### Quick Start (Recommended)
 
-This is the main server that serves content to Stremio. It should run constantly:
+Simply run:
 
 ```bash
 npm start
 ```
 
-Or:
+This single command starts **both services** together:
+- **SERVER** (blue output) - The Stremio server that serves content
+- **FETCHER** (green output) - The background service that fetches new posts
 
+The output will be color-coded so you can easily see which service is logging what.
+
+**What each service does:**
+
+**Stremio Server:**
+- Starts HTTP server on port 7003 (or configured port) for localhost access (127.0.0.1)
+- Starts HTTPS server on port 7004 (or configured port + 1) for IP address access (with self-signed certificate)
+- Serves content from the database
+- Ready immediately (no startup delay)
+- **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
+
+**Fetcher Service:**
+- Runs an initial fetch immediately
+- Then fetches every 15 minutes (or your configured interval) continuously
+- Each fetch round stops when it finds a fully processed weekend (both 1080p and 2160p posts fully processed)
+- The service continues running and automatically schedules the next fetch
+- Processes new posts and adds them to the database
+- Handles errors gracefully without crashing the service
+- **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
+
+### Running Services Individually
+
+If you need to run the services separately (for debugging, development, etc.):
+
+**Server only:**
 ```bash
+npm run server
+# or
 node server.js
 ```
 
-The server will:
-- Start HTTP server on port 7003 (or configured port) for localhost access (127.0.0.1)
-- Start HTTPS server on port 7004 (or configured port + 1) for IP address access (with self-signed certificate)
-- Serve content from the database
-- Be ready immediately (no startup delay)
-- **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
-
-### 2. Fetcher Service (Background Process)
-
-This service fetches new posts from Reddit and processes them:
-
+**Fetcher only:**
 ```bash
 npm run fetcher
-```
-
-Or:
-
-```bash
+# or
 node fetcher-service.js
 ```
 
-The fetcher service will:
-- Run an initial fetch immediately
-- Then fetch every 15 minutes (or your configured interval) continuously
-- Each fetch round stops when it finds a fully processed weekend (both 1080p and 2160p posts fully processed)
-- The service continues running and automatically schedules the next fetch
-- Process new posts and add them to the database
-- Handle errors gracefully without crashing the service
-- **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
+### Running in Production
 
-### Running Both Services
+For production deployments, here are some options:
 
-On a Raspberry Pi, you'll want to run both services. Here are some options:
-
-#### Option 1: Using screen (Recommended for Raspberry Pi)
+#### Option 1: Using screen (Simple setup)
 
 ```bash
 # Install screen if not already installed
 sudo apt-get install screen
 
-# Start server in a screen session
-screen -S stremula-server
+# Start both services in a screen session
+screen -S stremula
 npm start
 # Press Ctrl+A then D to detach
 
-# Start fetcher in another screen session
-screen -S stremula-fetcher
-npm run fetcher
-# Press Ctrl+A then D to detach
-
 # To reattach later:
-screen -r stremula-server
-screen -r stremula-fetcher
+screen -r stremula
 ```
 
 #### Option 2: Using systemd (Best for production - provides additional restart protection)
 
 **Note**: Both the server and fetcher now have built-in auto-restart functionality. Using systemd adds an extra layer of protection by restarting the processes even if the built-in restart mechanism fails.
 
-Create two systemd service files:
+You have two options for systemd:
+
+**Option A: Single Service (Simpler)**
+
+Create one systemd service file that runs both services:
+
+**`/etc/systemd/system/stremula.service`:**
+```ini
+[Unit]
+Description=Stremula 1 (Server + Fetcher)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/path/to/stremula-1
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start:
+
+```bash
+sudo systemctl enable stremula
+sudo systemctl start stremula
+```
+
+**Option B: Separate Services (Better for monitoring)**
+
+Create two systemd service files for independent control and monitoring:
 
 **`/etc/systemd/system/stremula-server.service`:**
 ```ini
@@ -199,6 +233,7 @@ WorkingDirectory=/path/to/stremula-1
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=10
+Environment=NODE_ENV=production
 
 [Install]
 WantedBy=multi-user.target
@@ -217,6 +252,7 @@ WorkingDirectory=/path/to/stremula-1
 ExecStart=/usr/bin/node fetcher-service.js
 Restart=always
 RestartSec=10
+Environment=NODE_ENV=production
 
 [Install]
 WantedBy=multi-user.target
@@ -230,6 +266,12 @@ sudo systemctl enable stremula-fetcher
 sudo systemctl start stremula-server
 sudo systemctl start stremula-fetcher
 ```
+
+**Recommendation:** Option B (separate services) is recommended for production as it allows you to:
+- Monitor each service independently
+- Restart services individually if needed
+- See separate logs for each service
+- Better debugging capabilities
 
 ## 📥 Backfilling Historical Data
 
@@ -476,8 +518,13 @@ You can still manually update at any time:
 cd ~/stremula-1
 git pull
 npm install  # Only if package.json changed
+
+# If using separate systemd services:
 sudo systemctl restart stremula-server
 sudo systemctl restart stremula-fetcher
+
+# If using single systemd service:
+sudo systemctl restart stremula
 ```
 
 ## 🐛 Troubleshooting
@@ -563,8 +610,12 @@ SELECT COUNT(*) FROM streaming_links;
 
 If running with systemd:
 ```bash
+# If using separate services:
 sudo journalctl -u stremula-server -f
 sudo journalctl -u stremula-fetcher -f
+
+# If using single service:
+sudo journalctl -u stremula -f
 ```
 
 ## 🔐 Security Notes
