@@ -285,31 +285,19 @@ sudo systemctl start stremula-fetcher
 To fill your database with historical F1 weekends, use the CLI tool:
 
 ```bash
-# Fetch 1 weekend
-npm run fetch1p
+# Fetch any number of weekends (X can be any number)
+node cli.js --fetchXp
 
-# Fetch 2 weekends
-npm run fetch2p
+# Examples:
+node cli.js --fetch1p    # Fetch 1 weekend
+node cli.js --fetch5p    # Fetch 5 weekends
+node cli.js --fetch17p   # Fetch 17 weekends
+node cli.js --fetch24p   # Fetch 24 weekends (full 2025 season)
 
-# Fetch 3 weekends
-npm run fetch3p
-
-# Fetch 5 weekends
-npm run fetch5p
-
-# Fetch 10 weekends
-npm run fetch10p
-
-# Fetch 20 weekends
-npm run fetch20p
-
-# Fetch all 24 weekends (full 2025 season)
-npm run fetch24p
-
-# Or use the CLI directly:
-node cli.js --fetch1p
-node cli.js --fetch2p
-# etc.
+# Convenience npm scripts (for common numbers):
+npm run fetch1p   # Same as: node cli.js --fetch1p
+npm run fetch5p   # Same as: node cli.js --fetch5p
+npm run fetch24p  # Same as: node cli.js --fetch24p
 ```
 
 **Note:** The normal fetcher service will stop each fetch round when it finds a fully processed weekend, but the service itself continues running and will automatically start the next fetch round after the configured interval. The CLI tool with `--fetchXp` will fetch a specific number of weekends regardless of processing status.

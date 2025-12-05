@@ -417,11 +417,21 @@ To populate your database with past F1 weekends:
 ```bash
 cd ~/stremula-1
 
-# Fetch all 24 weekends (full season)
+# Fetch any number of weekends (replace X with your desired number)
+node cli.js --fetchXp
+
+# Examples:
+node cli.js --fetch1p    # Fetch 1 weekend
+node cli.js --fetch5p    # Fetch 5 weekends
+node cli.js --fetch24p   # Fetch all 24 weekends (full season)
+
+# Or use convenience npm scripts for common numbers:
+npm run fetch1p
+npm run fetch5p
 npm run fetch24p
 ```
 
-This will take some time as it processes all the weekends.
+**Note:** Replace `X` with any number (e.g., `--fetch17p` for 17 weekends). This will take some time as it processes all the weekends.
 
 ---
 
