@@ -3,6 +3,7 @@ const express = require('express');
 const https = require('https');
 const http = require('http');
 const path = require('path');
+const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
 const { getCertificates } = require('./cert-utils');
@@ -12,6 +13,20 @@ let databaseReady = false;
 
 // Dynamic base URL - updated from requests
 let dynamicBaseUrl = null;
+
+// Auto-restart configuration
+const RESTART_CONFIG = {
+    maxRestarts: 5, // Maximum restart attempts
+    restartWindowMs: 60000, // 1 minute window
+    restartDelayMs: 5000, // 5 second delay before restart
+};
+
+// Track restart attempts
+let restartAttempts = [];
+let isRestarting = false;
+let httpServerInstance = null;
+let httpsServerInstance = null;
+let errorHandlersSetup = false;
 
 // Helper function to convert slug to GP name
 function slugToGpName(slug) {
@@ -404,8 +419,153 @@ builder.defineStreamHandler(async ({ type, id }) => {
     }
 });
 
+// Setup global error handlers for auto-restart
+function setupGlobalErrorHandlers() {
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        console.error('❌ Uncaught Exception:', error);
+        console.error('Stack:', error.stack);
+        handleCriticalError('uncaughtException', error);
+    });
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('❌ Unhandled Promise Rejection:', reason);
+        if (reason instanceof Error) {
+            console.error('Stack:', reason.stack);
+        }
+        handleCriticalError('unhandledRejection', reason);
+    });
+}
+
+// Handle critical errors with auto-restart
+function handleCriticalError(type, error) {
+    if (isRestarting) {
+        console.error('⚠️  Already restarting, exiting...');
+        process.exit(1);
+        return;
+    }
+
+    // Filter restart attempts within the window
+    const now = Date.now();
+    restartAttempts = restartAttempts.filter(timestamp => now - timestamp < RESTART_CONFIG.restartWindowMs);
+
+    // Check if we've exceeded max restarts
+    if (restartAttempts.length >= RESTART_CONFIG.maxRestarts) {
+        console.error(`❌ Maximum restart attempts (${RESTART_CONFIG.maxRestarts}) exceeded within ${RESTART_CONFIG.restartWindowMs}ms`);
+        console.error('   This indicates a persistent error. Please check logs and fix the issue.');
+        process.exit(1);
+        return;
+    }
+
+    // Add this restart attempt
+    restartAttempts.push(now);
+    
+    console.error(`\n⚠️  Critical error detected (${type}). Attempting to restart...`);
+    console.error(`   Restart attempt ${restartAttempts.length}/${RESTART_CONFIG.maxRestarts}`);
+    
+    // Gracefully shutdown servers
+    shutdownServers(() => {
+        console.log(`⏳ Waiting ${RESTART_CONFIG.restartDelayMs}ms before restart...`);
+        setTimeout(() => {
+            restartServer();
+        }, RESTART_CONFIG.restartDelayMs);
+    });
+}
+
+// Gracefully shutdown servers
+function shutdownServers(callback) {
+    isRestarting = true;
+    let shutdownCount = 0;
+    const totalServers = (httpServerInstance ? 1 : 0) + (httpsServerInstance ? 1 : 0);
+
+    if (totalServers === 0) {
+        callback();
+        return;
+    }
+
+    const checkShutdown = () => {
+        shutdownCount++;
+        if (shutdownCount >= totalServers) {
+            callback();
+        }
+    };
+
+    if (httpServerInstance) {
+        httpServerInstance.close(() => {
+            console.log('✅ HTTP server closed');
+            httpServerInstance = null;
+            checkShutdown();
+        });
+    } else {
+        checkShutdown();
+    }
+
+    if (httpsServerInstance) {
+        httpsServerInstance.close(() => {
+            console.log('✅ HTTPS server closed');
+            httpsServerInstance = null;
+            checkShutdown();
+        });
+    } else {
+        checkShutdown();
+    }
+
+    // Force close after timeout
+    setTimeout(() => {
+        if (httpServerInstance) {
+            httpServerInstance.close();
+            httpServerInstance = null;
+        }
+        if (httpsServerInstance) {
+            httpsServerInstance.close();
+            httpsServerInstance = null;
+        }
+        callback();
+    }, 10000);
+}
+
+// Restart the server process
+function restartServer() {
+    console.log('🔄 Restarting server...');
+    isRestarting = true;
+
+    // Use child_process to spawn a new instance
+    const args = process.argv.slice(1);
+    const child = spawn(process.execPath, args, {
+        stdio: 'inherit',
+        detached: false
+    });
+
+    child.on('error', (error) => {
+        console.error('❌ Failed to restart server:', error);
+        process.exit(1);
+    });
+
+    child.on('exit', (code) => {
+        if (code !== 0) {
+            console.error(`❌ Server restart process exited with code ${code}`);
+            process.exit(code);
+        }
+    });
+
+    // Exit current process after spawning new one
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
+}
+
 // Start server
 async function startServer() {
+    // Reset restart flag
+    isRestarting = false;
+
+    // Setup global error handlers on first run
+    if (!errorHandlersSetup) {
+        setupGlobalErrorHandlers();
+        errorHandlersSetup = true;
+    }
+
     const config = getConfig();
     
     // Initialize database
@@ -415,7 +575,8 @@ async function startServer() {
         console.log('✅ Database initialized');
     } catch (error) {
         console.error('❌ Failed to initialize database:', error);
-        process.exit(1);
+        handleCriticalError('databaseInit', error);
+        return;
     }
     
     // Check configuration
@@ -467,75 +628,107 @@ async function startServer() {
     }
     
     // Start HTTP server for localhost (Stremio allows HTTP for 127.0.0.1)
-    const httpServer = http.createServer(app);
-    httpServer.listen(httpPort, '127.0.0.1', () => {
-        console.log(`\n🌐 HTTP server running on port ${httpPort} (localhost only)`);
-        console.log(`📡 Install in Stremio (localhost): http://localhost:${httpPort}/manifest.json`);
-        console.log(`📡 Install in Stremio (localhost): http://127.0.0.1:${httpPort}/manifest.json`);
-    });
+    httpServerInstance = http.createServer(app);
     
-    // Handle HTTP server errors
-    httpServer.on('error', (error) => {
+    // Add error handler to prevent crashes from propagating
+    httpServerInstance.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
             console.error(`\n❌ Port ${httpPort} is already in use.`);
             console.error(`   Please stop the other process or use a different port.`);
             console.error(`   To find and kill the process: kill -9 $(lsof -ti:${httpPort})`);
+            // Don't restart for port conflicts - this is a configuration issue
             process.exit(1);
         } else {
             console.error('❌ HTTP server error:', error);
-            process.exit(1);
+            handleCriticalError('httpServerError', error);
         }
     });
+
+    // Handle client errors gracefully
+    httpServerInstance.on('clientError', (err, socket) => {
+        console.error('⚠️  HTTP client error:', err.message);
+        socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    });
+
+    try {
+        httpServerInstance.listen(httpPort, '127.0.0.1', () => {
+            console.log(`\n🌐 HTTP server running on port ${httpPort} (localhost only)`);
+            console.log(`📡 Install in Stremio (localhost): http://localhost:${httpPort}/manifest.json`);
+            console.log(`📡 Install in Stremio (localhost): http://127.0.0.1:${httpPort}/manifest.json`);
+        });
+    } catch (error) {
+        console.error('❌ Failed to start HTTP server:', error);
+        handleCriticalError('httpServerStart', error);
+        return;
+    }
     
     // Start HTTPS server for IP access on different port (if certificates available)
     if (sslOptions) {
-        const httpsServer = https.createServer(sslOptions, app);
-        httpsServer.listen(httpsPort, '0.0.0.0', () => {
-            console.log(`\n🔒 HTTPS server running on port ${httpsPort} (for IP access)`);
-            
-            // Get local IP addresses for display
-            const os = require('os');
-            const interfaces = os.networkInterfaces();
-            const ips = [];
-            for (const name of Object.keys(interfaces)) {
-                for (const iface of interfaces[name]) {
-                    if (iface.family === 'IPv4' && !iface.internal) {
-                        ips.push(iface.address);
-                    }
-                }
-            }
-            
-            if (ips.length > 0) {
-                console.log(`📡 Install in Stremio (via IP):`);
-                ips.forEach(ip => {
-                    console.log(`   https://${ip}:${httpsPort}/manifest.json`);
-                });
-            } else {
-                console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
-                console.log(`   (Replace YOUR_IP with your device's IP address)`);
-            }
-            console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
-            console.log(`   This is normal for local development. You can safely proceed.`);
-        });
+        httpsServerInstance = https.createServer(sslOptions, app);
         
         // Handle HTTPS server errors
-        httpsServer.on('error', (error) => {
+        httpsServerInstance.on('error', (error) => {
             if (error.code === 'EADDRINUSE') {
                 console.error(`\n❌ Port ${httpsPort} is already in use.`);
                 console.error(`   Please stop the other process or use a different port.`);
                 console.error(`   To find and kill the process: kill -9 $(lsof -ti:${httpsPort})`);
+                // Don't restart for port conflicts
             } else {
                 console.error('❌ HTTPS server error:', error);
+                // Don't restart for HTTPS errors if HTTP is still running
+                console.error('⚠️  HTTP server continues running for localhost access');
             }
-            // Don't exit - HTTP server is still running for localhost
         });
+
+        // Handle client errors gracefully
+        httpsServerInstance.on('clientError', (err, socket) => {
+            console.error('⚠️  HTTPS client error:', err.message);
+            socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+        });
+
+        try {
+            httpsServerInstance.listen(httpsPort, '0.0.0.0', () => {
+                console.log(`\n🔒 HTTPS server running on port ${httpsPort} (for IP access)`);
+                
+                // Get local IP addresses for display
+                const os = require('os');
+                const interfaces = os.networkInterfaces();
+                const ips = [];
+                for (const name of Object.keys(interfaces)) {
+                    for (const iface of interfaces[name]) {
+                        if (iface.family === 'IPv4' && !iface.internal) {
+                            ips.push(iface.address);
+                        }
+                    }
+                }
+                
+                if (ips.length > 0) {
+                    console.log(`📡 Install in Stremio (via IP):`);
+                    ips.forEach(ip => {
+                        console.log(`   https://${ip}:${httpsPort}/manifest.json`);
+                    });
+                } else {
+                    console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
+                    console.log(`   (Replace YOUR_IP with your device's IP address)`);
+                }
+                console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
+                console.log(`   This is normal for local development. You can safely proceed.`);
+            });
+        } catch (error) {
+            console.error('❌ Failed to start HTTPS server:', error);
+            console.error('⚠️  HTTP server continues running for localhost access');
+        }
     }
     
     console.log(`📊 Database ready: ${databaseReady}`);
+    console.log(`🔄 Auto-restart enabled (max ${RESTART_CONFIG.maxRestarts} restarts per ${RESTART_CONFIG.restartWindowMs/1000}s)`);
 }
 
 if (require.main === module) {
-    startServer().catch(console.error);
+    startServer().catch((error) => {
+        console.error('❌ Failed to start server:', error);
+        handleCriticalError('startup', error);
+    });
 }
 
 module.exports = { startServer };

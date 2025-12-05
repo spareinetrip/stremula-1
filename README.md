@@ -116,6 +116,7 @@ The server will:
 - Start HTTPS server on port 7004 (or configured port + 1) for IP address access (with self-signed certificate)
 - Serve content from the database
 - Be ready immediately (no startup delay)
+- **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
 
 ### 2. Fetcher Service (Background Process)
 
@@ -138,6 +139,7 @@ The fetcher service will:
 - The service continues running and automatically schedules the next fetch
 - Process new posts and add them to the database
 - Handle errors gracefully without crashing the service
+- **Auto-restart on crashes**: Automatically restarts if it crashes (up to 5 restarts per minute)
 
 ### Running Both Services
 
@@ -164,7 +166,9 @@ screen -r stremula-server
 screen -r stremula-fetcher
 ```
 
-#### Option 2: Using systemd (Best for production)
+#### Option 2: Using systemd (Best for production - provides additional restart protection)
+
+**Note**: Both the server and fetcher now have built-in auto-restart functionality. Using systemd adds an extra layer of protection by restarting the processes even if the built-in restart mechanism fails.
 
 Create two systemd service files:
 
@@ -334,6 +338,41 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 4. **Server** serves content from the database in real-time
 5. Posts are only marked as "fully processed" when ALL required sessions are found and converted
 
+## 🔄 Auto-Restart Functionality
+
+Both the server and fetcher service now include built-in auto-restart functionality to handle crashes and unexpected errors:
+
+### How It Works
+
+- **Automatic Recovery**: If either service crashes due to an unhandled exception or promise rejection, it will automatically restart
+- **Smart Limiting**: To prevent infinite restart loops, the system limits restarts to:
+  - Maximum 5 restarts per 60-second window
+  - 5-second delay between restart attempts
+- **Graceful Shutdown**: Before restarting, services gracefully shut down existing connections and cleanup resources
+- **Configuration Errors**: Configuration errors (missing API keys, etc.) do not trigger auto-restart as these require manual intervention
+
+### When Auto-Restart Helps
+
+- Unhandled JavaScript exceptions
+- Unhandled promise rejections  
+- Unexpected runtime errors
+- Memory-related crashes (Node.js will still restart)
+
+### When Auto-Restart Doesn't Help
+
+- Port conflicts (these are configuration issues, not crashes)
+- Missing configuration files or API keys
+- System-level issues (out of memory, disk full)
+- Manual termination (Ctrl+C)
+
+### Additional Protection
+
+For production deployments, it's recommended to also use:
+- **systemd** (Linux): Provides an additional layer of restart protection (already documented above)
+- **PM2** (cross-platform): Another popular process manager that can work alongside the built-in restart mechanism
+
+The built-in auto-restart works independently and provides immediate recovery, while systemd/PM2 provides additional protection for system-level failures.
+
 ## 🐛 Troubleshooting
 
 ### "Real Debrid not configured"
@@ -359,6 +398,12 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 - Check that port 7003 (or your configured port) is not in use
 - Verify Node.js version is 16 or higher: `node --version`
 - Check that all dependencies are installed: `npm install`
+
+### Service keeps restarting
+- If you see "Maximum restart attempts exceeded", there's a persistent error
+- Check the logs to identify the root cause
+- Common issues: database corruption, network connectivity, API authentication failures
+- The service will stop restarting after 5 attempts in 60 seconds to prevent infinite loops
 
 ## 📊 Monitoring
 
