@@ -1,6 +1,7 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
 const https = require('https');
+const http = require('http');
 const path = require('path');
 const { getConfig } = require('./config');
 const db = require('./database');
@@ -116,6 +117,13 @@ function getPosterForGrandPrix(gpName) {
     return `${getPublicBaseUrl()}/media/background.jpeg`;
 }
 
+// Helper to check if host is localhost
+function isLocalhost(host) {
+    if (!host) return true;
+    const hostname = host.split(':')[0];
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
 function getPublicBaseUrl() {
     const config = getConfig();
     // Use configured base URL if set
@@ -126,9 +134,9 @@ function getPublicBaseUrl() {
     if (dynamicBaseUrl) {
         return dynamicBaseUrl;
     }
-    // Fallback to localhost
-    const port = config.server.port || 7003;
-    return `https://localhost:${port}`;
+    // Fallback to localhost (HTTP for localhost)
+    const httpPort = config.server.port || 7003;
+    return `http://localhost:${httpPort}`;
 }
 
 // Addon Manifest
@@ -420,17 +428,21 @@ async function startServer() {
         console.log('⚠️  Reddit API not configured');
     }
     
-    const port = config.server.port || 7003;
+    const httpPort = config.server.port || 7003;
+    const httpsPort = httpPort + 1; // HTTPS on next port
     const app = express();
     
     // Dynamic base URL detection from requests
     app.use((req, _res, next) => {
         try {
-            const proto = (req.headers['x-forwarded-proto'] || '').toString().split(',')[0] || 'https';
             const host = req.headers.host;
             if (host) {
+                // Determine protocol based on host
+                // localhost uses HTTP, IP addresses use HTTPS
+                const isLocal = isLocalhost(host);
+                const proto = isLocal ? 'http' : (req.headers['x-forwarded-proto'] || '').toString().split(',')[0] || 'https';
                 // Update dynamic base URL based on the request
-                // This ensures images use the correct host (IP or localhost)
+                // This ensures images use the correct host and protocol
                 dynamicBaseUrl = `${proto}://${host}`;
             }
         } catch (_e) {}
@@ -444,59 +456,82 @@ async function startServer() {
     const router = getRouter({ manifest, get: builder.getInterface().get });
     app.use('/', router);
     
-    // Get SSL certificates for HTTPS (required)
+    // Get SSL certificates for HTTPS (required for IP access)
     let sslOptions;
     try {
         sslOptions = await getCertificates();
     } catch (error) {
-        console.error('❌ Failed to load SSL certificates:', error.message);
-        console.error('   HTTPS is required for Stremio addons. Exiting...');
-        process.exit(1);
+        console.error('⚠️  Failed to load SSL certificates:', error.message);
+        console.error('   HTTPS will not be available. Only localhost HTTP will work.');
+        sslOptions = null;
     }
     
-    // Start HTTPS server
-    const httpsServer = https.createServer(sslOptions, app);
-    httpsServer.listen(port, '0.0.0.0', () => {
-        console.log(`\n🚀 Stremula 1 Addon server running on HTTPS port ${port}`);
-        
-        // Get local IP addresses for display
-        const os = require('os');
-        const interfaces = os.networkInterfaces();
-        const ips = [];
-        for (const name of Object.keys(interfaces)) {
-            for (const iface of interfaces[name]) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                    ips.push(iface.address);
-                }
-            }
-        }
-        
-        if (ips.length > 0) {
-            console.log(`📡 Install in Stremio (via IP):`);
-            ips.forEach(ip => {
-                console.log(`   https://${ip}:${port}/manifest.json`);
-            });
-        } else {
-            console.log(`📡 Install in Stremio: https://YOUR_IP:${port}/manifest.json`);
-            console.log(`   (Replace YOUR_IP with your MacBook's IP address)`);
-        }
-        console.log(`📡 Install in Stremio (localhost): https://localhost:${port}/manifest.json`);
-        console.log(`📊 Database ready: ${databaseReady}`);
-        console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
-        console.log(`   This is normal for local development. You can safely proceed.`);
+    // Start HTTP server for localhost (Stremio allows HTTP for 127.0.0.1)
+    const httpServer = http.createServer(app);
+    httpServer.listen(httpPort, '127.0.0.1', () => {
+        console.log(`\n🌐 HTTP server running on port ${httpPort} (localhost only)`);
+        console.log(`📡 Install in Stremio (localhost): http://localhost:${httpPort}/manifest.json`);
+        console.log(`📡 Install in Stremio (localhost): http://127.0.0.1:${httpPort}/manifest.json`);
     });
     
-    // Handle server errors
-    httpsServer.on('error', (error) => {
+    // Handle HTTP server errors
+    httpServer.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-            console.error(`\n❌ Port ${port} is already in use.`);
+            console.error(`\n❌ Port ${httpPort} is already in use.`);
             console.error(`   Please stop the other process or use a different port.`);
-            console.error(`   To find and kill the process: kill -9 $(lsof -ti:${port})`);
+            console.error(`   To find and kill the process: kill -9 $(lsof -ti:${httpPort})`);
+            process.exit(1);
         } else {
-            console.error('❌ HTTPS server error:', error);
+            console.error('❌ HTTP server error:', error);
+            process.exit(1);
         }
-        process.exit(1);
     });
+    
+    // Start HTTPS server for IP access on different port (if certificates available)
+    if (sslOptions) {
+        const httpsServer = https.createServer(sslOptions, app);
+        httpsServer.listen(httpsPort, '0.0.0.0', () => {
+            console.log(`\n🔒 HTTPS server running on port ${httpsPort} (for IP access)`);
+            
+            // Get local IP addresses for display
+            const os = require('os');
+            const interfaces = os.networkInterfaces();
+            const ips = [];
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name]) {
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        ips.push(iface.address);
+                    }
+                }
+            }
+            
+            if (ips.length > 0) {
+                console.log(`📡 Install in Stremio (via IP):`);
+                ips.forEach(ip => {
+                    console.log(`   https://${ip}:${httpsPort}/manifest.json`);
+                });
+            } else {
+                console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
+                console.log(`   (Replace YOUR_IP with your device's IP address)`);
+            }
+            console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
+            console.log(`   This is normal for local development. You can safely proceed.`);
+        });
+        
+        // Handle HTTPS server errors
+        httpsServer.on('error', (error) => {
+            if (error.code === 'EADDRINUSE') {
+                console.error(`\n❌ Port ${httpsPort} is already in use.`);
+                console.error(`   Please stop the other process or use a different port.`);
+                console.error(`   To find and kill the process: kill -9 $(lsof -ti:${httpsPort})`);
+            } else {
+                console.error('❌ HTTPS server error:', error);
+            }
+            // Don't exit - HTTP server is still running for localhost
+        });
+    }
+    
+    console.log(`📊 Database ready: ${databaseReady}`);
 }
 
 if (require.main === module) {

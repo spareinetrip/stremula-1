@@ -85,7 +85,7 @@ Edit the `config.json` file and fill in your credentials:
 - **`userAgent`**: Should match your Reddit username (e.g., if your username is `yourusername`, use `"Stremula1/3.0 (by u/yourusername)"`). This is required by Reddit's API.
 - **`publicBaseUrl`**: 
   - Leave empty (`""`) if running locally (will auto-detect from requests)
-  - Set to your public URL (e.g., `"https://192.168.1.100:7003"` or `"https://yourdomain.com"`) if accessing from other devices on your network or the internet
+  - Set to your public URL (e.g., `"https://YOUR_IP:7004"` for IP access or `"https://yourdomain.com"` for public server) if accessing from other devices on your network or the internet
   - This is used for serving media files (posters, thumbnails) to Stremio clients
 - The `intervalMinutes` setting controls how often the fetcher checks for new posts (default: 15 minutes)
 
@@ -112,7 +112,8 @@ node server.js
 ```
 
 The server will:
-- Start on port 7003 (or the port specified in config.json)
+- Start HTTP server on port 7003 (or configured port) for localhost access (127.0.0.1)
+- Start HTTPS server on port 7004 (or configured port + 1) for IP address access (with self-signed certificate)
 - Serve content from the database
 - Be ready immediately (no startup delay)
 
@@ -252,18 +253,19 @@ node cli.js --fetch2p
 2. Go to Addons → Community Addons
 3. Click the "+" button
 4. Enter your addon URL:
-   - **Local**: `https://localhost:7003/manifest.json`
-   - **Network IP**: `https://YOUR_IP:7003/manifest.json`
+   - **Localhost**: `http://localhost:7003/manifest.json` or `http://127.0.0.1:7003/manifest.json`
+   - **Network IP**: `https://YOUR_IP:7004/manifest.json` (note: port 7004 for HTTPS)
    - **Public server**: `https://YOUR_DOMAIN:7003/manifest.json`
 
-**Note:** The addon uses HTTPS with a self-signed certificate for local development. When accessing via IP address, your browser may show a "Website is not secure" warning. This is normal and safe for local use. To proceed:
-
-1. Open the addon URL directly in your browser (e.g., `https://192.168.1.118:7003/manifest.json`)
-2. Click "Advanced" or "Show Details" on the security warning
-3. Click "Proceed" or "Accept the Risk and Continue"
-4. Then add the addon in Stremio
-
-This only needs to be done once per browser session.
+**Note:** 
+- **Localhost** uses HTTP on port 7003 (Stremio allows HTTP for 127.0.0.1)
+- **IP addresses** require HTTPS on port 7004 with a self-signed certificate. When accessing via IP, your browser may show a "Website is not secure" warning. This is normal and safe for local use. To proceed:
+  1. Open the addon URL directly in your browser (e.g., `https://YOUR_IP:7004/manifest.json`)
+  2. Click "Advanced" or "Show Details" on the security warning
+  3. Click "Proceed" or "Accept the Risk and Continue"
+  4. Then add the addon in Stremio
+  
+  This only needs to be done once per browser session.
 
 ## 🔧 Configuration Options
 
@@ -278,7 +280,7 @@ This only needs to be done once per browser session.
 - **server.port**: Port for the Stremio server (default: 7003)
 - **server.publicBaseUrl**: 
   - Leave empty (`""`) for local use (will auto-detect from requests)
-  - Set to your IP address (e.g., `"https://192.168.1.100:7003"`) if accessing from other devices on your network
+  - Set to your IP address with HTTPS (e.g., `"https://YOUR_IP:7004/manifest.json"`) if accessing from other devices on your network
   - Set to your domain (e.g., `"https://yourdomain.com"`) if running on a public server
   - This URL is used to serve media files (posters, thumbnails) to Stremio clients
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
@@ -365,7 +367,11 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 The server runs on port 7003 by default. You can check if it's running:
 
 ```bash
-curl https://localhost:7003/manifest.json -k
+# For localhost (HTTP on port 7003)
+curl http://localhost:7003/manifest.json
+
+# For IP address (HTTPS on port 7004 with self-signed cert)
+curl https://YOUR_IP:7004/manifest.json -k
 ```
 
 ### Check Database
