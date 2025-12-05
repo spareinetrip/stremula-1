@@ -603,8 +603,9 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey, postI
                 return null;
             } else {
                 // Still downloading/processing - show progress
+                // Real Debrid returns progress as a percentage (0.60 = 0.60%, 1.70 = 1.70%)
                 const progress = torrentInfo.progress !== undefined 
-                    ? Math.round(torrentInfo.progress * 100) 
+                    ? torrentInfo.progress.toFixed(2) 
                     : 'unknown';
                 console.log(`⏳ Torrent ${torrentId} status: ${currentStatus} (${progress}%) - attempt ${attempts + 1}/${maxAttempts}`);
             }
