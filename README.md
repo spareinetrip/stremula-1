@@ -327,6 +327,128 @@ node cli.js --fetch2p
   
   This only needs to be done once per browser session.
 
+## 🌐 Connecting from Another Network
+
+The server automatically starts two services:
+- **HTTP server** on port 7003 (localhost only - `127.0.0.1`)
+- **HTTPS server** on port 7004 (network access - `0.0.0.0`)
+
+### Scenario 1: Same Local Network (WiFi/LAN)
+
+If you want to access the addon from another device on the same network (e.g., your phone, tablet, or another computer):
+
+1. **Find your server's local IP address:**
+   ```bash
+   # On macOS/Linux
+   ifconfig | grep "inet " | grep -v 127.0.0.1
+   
+   # On Windows
+   ipconfig
+   
+   # On Raspberry Pi
+   hostname -I
+   ```
+   Example: `192.168.1.118`
+
+2. **Use the HTTPS URL in Stremio:**
+   ```
+   https://192.168.1.118:7004/manifest.json
+   ```
+   (Replace with your actual IP address)
+
+3. **Optional: Set `publicBaseUrl` in config.json:**
+   ```json
+   "server": {
+     "port": 7003,
+     "publicBaseUrl": "https://192.168.1.118:7004"
+   }
+   ```
+   This ensures media files (posters, thumbnails) use the correct URL.
+
+4. **Handle the security warning:**
+   - Your browser will show a "Website is not secure" warning (this is normal for self-signed certificates)
+   - Click "Advanced" → "Proceed" or "Accept the Risk"
+   - This is safe for local network use
+
+### Scenario 2: Different Network (Internet Access)
+
+To access from outside your local network (e.g., from work, a friend's house, or mobile data):
+
+1. **Find your public IP address:**
+   ```bash
+   curl ifconfig.me
+   ```
+   Example: `203.0.113.42`
+
+2. **Configure Router Port Forwarding:**
+   - Log into your router's admin panel (usually `192.168.1.1` or `192.168.0.1`)
+   - Navigate to "Port Forwarding" or "Virtual Server" settings
+   - Add a new rule:
+     - **External Port**: `7004`
+     - **Internal IP**: Your server's local IP (e.g., `192.168.1.118`)
+     - **Internal Port**: `7004`
+     - **Protocol**: `TCP`
+   - Save the configuration
+
+3. **Configure Firewall (if enabled):**
+   ```bash
+   # On macOS (if firewall is enabled)
+   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/local/bin/node
+   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/local/bin/node
+   
+   # On Linux (using ufw)
+   sudo ufw allow 7004/tcp
+   
+   # On Raspberry Pi
+   sudo ufw allow 7004/tcp
+   ```
+
+4. **Update config.json:**
+   ```json
+   "server": {
+     "port": 7003,
+     "publicBaseUrl": "https://203.0.113.42:7004"
+   }
+   ```
+   (Replace with your actual public IP)
+
+5. **Use the public IP URL in Stremio:**
+   ```
+   https://203.0.113.42:7004/manifest.json
+   ```
+   (Replace with your actual public IP)
+
+6. **Note about Dynamic IPs:**
+   - Most home internet connections have dynamic IPs that change periodically
+   - Consider using a Dynamic DNS service (e.g., DuckDNS, No-IP) if your IP changes frequently
+   - Or check your public IP before connecting each time
+
+### 🔒 Self-Signed Certificate Warnings
+
+**Security Warning:**
+- The HTTPS server uses a self-signed certificate for convenience
+- Browsers will show security warnings - this is **normal and expected**
+- For local network use, this is perfectly safe
+- For production/public servers, consider using Let's Encrypt or a proper SSL certificate
+
+### 🧪 Testing Your Connection
+
+**Test from the same network:**
+```bash
+# Replace with your server's local IP
+curl -k https://192.168.1.118:7004/manifest.json
+```
+
+**Test from a different network:**
+```bash
+# Replace with your public IP
+curl -k https://YOUR_PUBLIC_IP:7004/manifest.json
+```
+
+The `-k` flag ignores SSL certificate warnings (required for self-signed certs).
+
+If you see JSON output, the server is accessible!
+
 ## 🔧 Configuration Options
 
 ### config.json

@@ -427,18 +427,146 @@ This will take some time as it processes all the weekends.
 
 ## Part 8: Installing in Stremio
 
-1. **Open Stremio** on your device (phone, computer, TV, etc.)
+### Option A: Localhost Access (Same Device)
+
+If you're running Stremio on the same Raspberry Pi:
+
+1. **Open Stremio** on your Pi
 2. **Go to Addons** → **Community Addons**
 3. **Click the "+" button**
 4. **Enter your addon URL:**
    ```
-   http://YOUR_PI_IP:7003/manifest.json
+   http://localhost:7003/manifest.json
    ```
-   Replace `YOUR_PI_IP` with your Raspberry Pi's IP address (e.g., `192.168.1.100`)
-
 5. **Click "Install"**
 
+### Option B: Network Access (Other Devices on Same Network)
+
+To access from your phone, computer, or TV on the same WiFi network:
+
+1. **Find your Pi's IP address:**
+   ```bash
+   hostname -I
+   ```
+   Example output: `192.168.1.100`
+
+2. **Update config.json** (optional but recommended):
+   ```bash
+   nano ~/stremula-1/config.json
+   ```
+   Set `publicBaseUrl` to your Pi's IP:
+   ```json
+   "server": {
+     "port": 7003,
+     "publicBaseUrl": "https://192.168.1.100:7004"
+   }
+   ```
+   Save and exit (`Ctrl + X`, `Y`, `Enter`)
+
+3. **Restart the service** (if it's running):
+   ```bash
+   # If using separate services:
+   sudo systemctl restart stremula-server
+   
+   # If using single service:
+   sudo systemctl restart stremula
+   ```
+
+4. **Open Stremio** on your device (phone, computer, TV, etc.)
+5. **Go to Addons** → **Community Addons**
+6. **Click the "+" button**
+7. **Enter your addon URL:**
+   ```
+   https://192.168.1.100:7004/manifest.json
+   ```
+   (Replace `192.168.1.100` with your Pi's actual IP address)
+
+8. **Handle the security warning:**
+   - Your browser/device may show a "Website is not secure" warning
+   - This is normal for self-signed certificates
+   - Click "Advanced" → "Proceed" or "Accept the Risk"
+   - This is safe for local network use
+
+9. **Click "Install"**
+
 The addon should now appear in your Stremio library!
+
+### Option C: Internet Access (Different Network)
+
+To access your Pi's addon from outside your local network (e.g., from work, mobile data, or another location):
+
+**⚠️ Security Note:** Exposing your server to the internet has security implications. Only do this if you understand the risks and trust your network setup. See the security section below.
+
+1. **Find your public IP address:**
+   ```bash
+   curl ifconfig.me
+   ```
+   Example: `203.0.113.42`
+
+2. **Configure Router Port Forwarding:**
+   - Log into your router's admin panel (usually `192.168.1.1` or `192.168.0.1`)
+   - Navigate to "Port Forwarding" or "Virtual Server" settings
+   - Add a new rule:
+     - **External Port**: `7004`
+     - **Internal IP**: Your Pi's local IP (e.g., `192.168.1.100`)
+     - **Internal Port**: `7004`
+     - **Protocol**: `TCP`
+   - Save the configuration
+
+3. **Configure Firewall on Pi:**
+   ```bash
+   # Allow port 7004 through firewall
+   sudo ufw allow 7004/tcp
+   
+   # Verify firewall status
+   sudo ufw status
+   ```
+
+4. **Update config.json:**
+   ```bash
+   nano ~/stremula-1/config.json
+   ```
+   Set `publicBaseUrl` to your public IP:
+   ```json
+   "server": {
+     "port": 7003,
+     "publicBaseUrl": "https://203.0.113.42:7004"
+   }
+   ```
+   (Replace with your actual public IP)
+
+5. **Restart the service:**
+   ```bash
+   # If using separate services:
+   sudo systemctl restart stremula-server
+   
+   # If using single service:
+   sudo systemctl restart stremula
+   ```
+
+6. **Open Stremio** on your remote device
+7. **Go to Addons** → **Community Addons**
+8. **Click the "+" button**
+9. **Enter your addon URL:**
+   ```
+   https://203.0.113.42:7004/manifest.json
+   ```
+   (Replace with your actual public IP)
+
+10. **Handle the security warning** (same as Option B)
+
+**Note about Dynamic IPs:**
+- Most home internet connections have dynamic IPs that change periodically
+- If your IP changes, you'll need to update the `publicBaseUrl` in config.json
+- Consider using a Dynamic DNS service (e.g., DuckDNS, No-IP) for a stable hostname
+
+### 🔒 Self-Signed Certificate Warnings
+
+**Security Warning:**
+- The HTTPS server uses a self-signed certificate for convenience
+- Browsers will show security warnings - this is **normal and expected**
+- For local network use, this is perfectly safe
+- For production/public servers, consider using Let's Encrypt or a proper SSL certificate
 
 ---
 
