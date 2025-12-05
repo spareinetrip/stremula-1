@@ -113,7 +113,26 @@ You should see versions like `v20.x.x` and `10.x.x`.
 
 ## Part 4: Downloading the Project from GitHub
 
+### Choosing Installation Location
+
+You have two options for where to install:
+
+**Option A: Home Directory (`~/stremula-1`)** - **Simpler, good for single service**
+- ✅ No permission issues
+- ✅ Easy to manage
+- ❌ Can clutter home directory if you run many services
+
+**Option B: `/opt/stremula-1`** - **Recommended for multiple services**
+- ✅ Standard Linux location for optional software
+- ✅ Keeps home directory clean
+- ✅ Better organization when running multiple services
+- ⚠️ Requires `sudo` for installation
+
+**Recommendation:** If you plan to run multiple services, use `/opt`. Otherwise, home directory is fine.
+
 ### Using Git (Recommended)
+
+**Option A: Install in Home Directory**
 
 On your Raspberry Pi (via SSH):
 
@@ -128,9 +147,26 @@ git clone https://github.com/YOUR_USERNAME/stremula-1.git
 cd stremula-1
 ```
 
+**Option B: Install in /opt (Recommended for Multiple Services)**
+
+On your Raspberry Pi (via SSH):
+
+```bash
+# Clone to /opt (requires sudo)
+sudo git clone https://github.com/YOUR_USERNAME/stremula-1.git /opt/stremula-1
+
+# Fix ownership so you can manage it without sudo
+sudo chown -R $USER:$USER /opt/stremula-1
+
+# Navigate into the project directory
+cd /opt/stremula-1
+```
+
 **Note:** Replace `https://github.com/YOUR_USERNAME/stremula-1.git` with your actual GitHub repository URL.
 
 **✅ Git remote automatically configured:** Using `git clone` automatically sets up the git remote, which means the auto-updater will work immediately without any additional setup.
+
+**⚠️ Important:** If you install in `/opt`, remember to update the `WorkingDirectory` path in the systemd service files (Part 6) from `/home/pi/stremula-1` to `/opt/stremula-1`.
 
 ### Alternative: Using SCP (if you prefer manual transfer)
 
@@ -138,21 +174,52 @@ If you haven't pushed your project to GitHub yet, you can copy it manually:
 
 From your **Mac Terminal** (not connected to Pi), navigate to your project directory and copy files:
 
+**To home directory:**
 ```bash
 # Make sure you're in the directory containing 'stremula-1'
 cd "/Users/julien/Stremula 1"
 
-# Copy the entire stremula-1 folder to your Pi
+# Copy the entire stremula-1 folder to your Pi's home directory
 # Replace 192.168.1.100 with your Pi's IP
 # Replace 'pi' with your username if different
 scp -r stremula-1 pi@192.168.1.100:~/
 ```
 
+**To /opt directory:**
+```bash
+# Make sure you're in the directory containing 'stremula-1'
+cd "/Users/julien/Stremula 1"
+
+# Copy to /tmp first (no sudo needed)
+scp -r stremula-1 pi@192.168.1.100:/tmp/
+
+# Then on the Pi, move it to /opt and fix ownership
+# SSH into your Pi and run:
+# sudo mv /tmp/stremula-1 /opt/
+# sudo chown -R $USER:$USER /opt/stremula-1
+```
+
 **Important Note:** If you use SCP or download the project as a ZIP file (instead of `git clone`), the git remote will NOT be automatically configured. The auto-updater requires a git remote to check for updates. To set it up:
 
+**If in home directory:**
 ```bash
 # On your Raspberry Pi, navigate to the project
 cd ~/stremula-1
+
+# Initialize git repository (if not already a git repo)
+git init
+
+# Add the remote (replace with your actual GitHub repo URL)
+git remote add origin https://github.com/YOUR_USERNAME/stremula-1.git
+
+# Verify it was added
+git remote -v
+```
+
+**If in /opt:**
+```bash
+# On your Raspberry Pi, navigate to the project
+cd /opt/stremula-1
 
 # Initialize git repository (if not already a git repo)
 git init
@@ -188,8 +255,14 @@ If you used Git clone, you should already be in the project directory. If not, n
 
 On your Raspberry Pi (via SSH):
 
+**If installed in home directory:**
 ```bash
 cd ~/stremula-1
+```
+
+**If installed in /opt:**
+```bash
+cd /opt/stremula-1
 ```
 
 ### Step 2: Install Dependencies
@@ -257,8 +330,9 @@ This runs both the server and fetcher together in one service:
 sudo nano /etc/systemd/system/stremula.service
 ```
 
-**Paste this content** (adjust the path if your project is elsewhere):
+**Paste this content** (adjust the path based on where you installed):
 
+**If installed in home directory (`~/stremula-1`):**
 ```ini
 [Unit]
 Description=Stremula 1 (Server + Fetcher)
@@ -276,6 +350,27 @@ Environment=NODE_ENV=production
 [Install]
 WantedBy=multi-user.target
 ```
+
+**If installed in `/opt/stremula-1`:**
+```ini
+[Unit]
+Description=Stremula 1 (Server + Fetcher)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/stremula-1
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Note:** Replace `pi` with your actual username if different.
 
 Save and exit (`Ctrl + X`, `Y`, `Enter`).
 
@@ -314,8 +409,9 @@ Create the server service:
 sudo nano /etc/systemd/system/stremula-server.service
 ```
 
-**Paste this content** (adjust the path if your project is elsewhere):
+**Paste this content** (adjust the path based on where you installed):
 
+**If installed in home directory (`~/stremula-1`):**
 ```ini
 [Unit]
 Description=Stremula 1 Stremio Server
@@ -334,6 +430,25 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
+**If installed in `/opt/stremula-1`:**
+```ini
+[Unit]
+Description=Stremula 1 Stremio Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/stremula-1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
 Save and exit (`Ctrl + X`, `Y`, `Enter`).
 
 Create the fetcher service:
@@ -342,8 +457,9 @@ Create the fetcher service:
 sudo nano /etc/systemd/system/stremula-fetcher.service
 ```
 
-**Paste this content**:
+**Paste this content** (adjust the path based on where you installed):
 
+**If installed in home directory (`~/stremula-1`):**
 ```ini
 [Unit]
 Description=Stremula 1 Fetcher Service
@@ -361,6 +477,27 @@ Environment=NODE_ENV=production
 [Install]
 WantedBy=multi-user.target
 ```
+
+**If installed in `/opt/stremula-1`:**
+```ini
+[Unit]
+Description=Stremula 1 Fetcher Service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/stremula-1
+ExecStart=/usr/bin/node fetcher-service.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Note:** Replace `pi` with your actual username if different.
 
 Save and exit.
 
@@ -414,9 +551,18 @@ sudo journalctl -u stremula-fetcher -f
 
 To populate your database with past F1 weekends:
 
+**If installed in home directory:**
 ```bash
 cd ~/stremula-1
+```
 
+**If installed in /opt:**
+```bash
+cd /opt/stremula-1
+```
+
+Then run:
+```bash
 # Fetch any number of weekends (replace X with your desired number)
 node cli.js --fetchXp
 
@@ -462,7 +608,11 @@ To access from your phone, computer, or TV on the same WiFi network:
 
 2. **Update config.json** (optional but recommended):
    ```bash
+   # If in home directory:
    nano ~/stremula-1/config.json
+   
+   # If in /opt:
+   nano /opt/stremula-1/config.json
    ```
    Set `publicBaseUrl` to your Pi's IP:
    ```json
@@ -534,7 +684,11 @@ To access your Pi's addon from outside your local network (e.g., from work, mobi
 
 4. **Update config.json:**
    ```bash
+   # If in home directory:
    nano ~/stremula-1/config.json
+   
+   # If in /opt:
+   nano /opt/stremula-1/config.json
    ```
    Set `publicBaseUrl` to your public IP:
    ```json
@@ -631,9 +785,18 @@ sudo journalctl -u stremula -f
 
 If you make changes to the code on GitHub:
 
+**If installed in home directory:**
 ```bash
 cd ~/stremula-1
+```
 
+**If installed in /opt:**
+```bash
+cd /opt/stremula-1
+```
+
+Then run:
+```bash
 # Pull latest changes from GitHub
 git pull
 
@@ -699,8 +862,13 @@ curl http://YOUR_PI_IP:7003/manifest.json
 3. **Check permissions:**
    ```bash
    # Make sure the pi user owns the directory
+   # If in home directory:
    sudo chown -R pi:pi ~/stremula-1
+   
+   # If in /opt:
+   sudo chown -R pi:pi /opt/stremula-1
    ```
+   (Replace `pi` with your actual username)
 
 ### Can't access from Stremio
 
