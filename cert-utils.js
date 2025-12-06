@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const selfsigned = require('selfsigned');
 const { getConfig } = require('./config');
 
@@ -24,15 +25,18 @@ function getCurrentIPs() {
         }
     }
     
-    // Add IP from config if specified
+    // ALWAYS add IP from config if specified (this is critical!)
     const config = getConfig();
     if (config.server.publicBaseUrl) {
         try {
             const url = new URL(config.server.publicBaseUrl);
             const hostname = url.hostname;
             // Check if it's an IP address
-            if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && !altNames.includes(hostname)) {
-                altNames.push(hostname);
+            if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
+                if (!altNames.includes(hostname)) {
+                    altNames.push(hostname);
+                    console.log(`   📌 Adding IP from publicBaseUrl: ${hostname}`);
+                }
             }
         } catch (e) {
             // Invalid URL, skip
@@ -43,7 +47,7 @@ function getCurrentIPs() {
 }
 
 /**
- * Check if certificate needs regeneration
+ * Check if certificate needs regeneration by parsing it with openssl
  */
 function needsRegeneration() {
     if (!fs.existsSync(KEY_PATH) || !fs.existsSync(CERT_PATH)) {
@@ -51,13 +55,23 @@ function needsRegeneration() {
     }
     
     try {
-        // Read certificate and check if current IPs are included
-        const certContent = fs.readFileSync(CERT_PATH, 'utf8');
+        // Use openssl to properly parse the certificate and extract SAN
+        const certText = execSync(`openssl x509 -in "${CERT_PATH}" -text -noout 2>/dev/null`, { encoding: 'utf8' });
         const currentIPs = getCurrentIPs();
+        
+        // Extract IP addresses from the certificate's SAN field
+        const sanMatch = certText.match(/X509v3 Subject Alternative Name:\s*\n\s*([^\n]+(?:\n\s*[^\n]+)*)/);
+        if (!sanMatch) {
+            console.log('🔄 Certificate missing SAN field, regenerating...');
+            return true;
+        }
+        
+        const sanContent = sanMatch[1];
         
         // Check if all current IPs are in the certificate
         for (const ip of currentIPs) {
-            if (!certContent.includes(ip)) {
+            // Check for both "IP Address:IP" and "IP:IP" formats
+            if (!sanContent.includes(ip) && !sanContent.includes(`IP:${ip}`) && !sanContent.includes(`IP Address:${ip}`)) {
                 console.log(`🔄 Certificate missing IP ${ip}, regenerating...`);
                 return true;
             }
@@ -65,13 +79,15 @@ function needsRegeneration() {
         
         return false;
     } catch (error) {
-        console.log('⚠️  Error checking certificate, regenerating...');
+        // If openssl fails or certificate is invalid, regenerate
+        console.log('⚠️  Error checking certificate (openssl may not be available or cert invalid), regenerating...');
         return true;
     }
 }
 
 /**
  * Generate self-signed certificate for local development
+ * Always regenerates on startup to ensure current IPs are included
  */
 async function generateSelfSignedCert(forceRegenerate = false) {
     // Create certs directory if it doesn't exist
@@ -79,18 +95,23 @@ async function generateSelfSignedCert(forceRegenerate = false) {
         fs.mkdirSync(CERT_DIR, { recursive: true });
     }
 
-    // Check if certificates already exist and are valid
-    if (!forceRegenerate && !needsRegeneration()) {
+    // Always check if regeneration is needed (even if not forced)
+    const shouldRegenerate = forceRegenerate || needsRegeneration();
+    
+    if (!shouldRegenerate) {
+        console.log('✅ Existing certificate is valid, using it');
         return {
             key: fs.readFileSync(KEY_PATH, 'utf8'),
             cert: fs.readFileSync(CERT_PATH, 'utf8')
         };
     }
 
-    // If regenerating, remove old certificates
-    if (forceRegenerate || needsRegeneration()) {
-        if (fs.existsSync(KEY_PATH)) fs.unlinkSync(KEY_PATH);
-        if (fs.existsSync(CERT_PATH)) fs.unlinkSync(CERT_PATH);
+    // Remove old certificates before regenerating
+    if (fs.existsSync(KEY_PATH)) {
+        fs.unlinkSync(KEY_PATH);
+    }
+    if (fs.existsSync(CERT_PATH)) {
+        fs.unlinkSync(CERT_PATH);
     }
 
     console.log('🔐 Generating self-signed SSL certificate for local development...');
@@ -98,8 +119,13 @@ async function generateSelfSignedCert(forceRegenerate = false) {
     // Get local IP addresses to include in certificate
     const altNames = getCurrentIPs();
     
+    console.log(`   📋 Including in certificate:`);
+    console.log(`      - DNS: localhost`);
+    console.log(`      - IP: 127.0.0.1`);
     if (altNames.length > 2) {
-        console.log(`   Including IP addresses: ${altNames.slice(2).join(', ')}`);
+        altNames.slice(2).forEach(ip => {
+            console.log(`      - IP: ${ip}`);
+        });
     }
 
     // Generate certificate (returns a Promise in v5.x)
@@ -140,9 +166,12 @@ async function generateSelfSignedCert(forceRegenerate = false) {
 
 /**
  * Get SSL certificates, generating them if needed
+ * Always checks on startup if certificate needs regeneration
  */
 async function getCertificates(forceRegenerate = false) {
     try {
+        // Always check if regeneration is needed on startup
+        // This ensures the certificate includes current IPs from publicBaseUrl
         return await generateSelfSignedCert(forceRegenerate);
     } catch (error) {
         console.error('❌ Error generating SSL certificate:', error);
