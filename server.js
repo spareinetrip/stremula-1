@@ -3,10 +3,11 @@ const express = require('express');
 const https = require('https');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
-const { getCertificates } = require('./cert-utils');
+const { getCertificates, getCACertificatePath } = require('./cert-ca-utils');
 
 // Initialize database
 let databaseReady = false;
@@ -626,6 +627,22 @@ async function startServer() {
     // Serve static files (media folder)
     app.use('/media', express.static(path.join(__dirname, 'media')));
     
+    // Serve CA certificate for installation
+    app.get('/ca.crt', (req, res) => {
+        try {
+            const caPath = getCACertificatePath();
+            if (fs.existsSync(caPath)) {
+                res.setHeader('Content-Type', 'application/x-x509-ca-cert');
+                res.setHeader('Content-Disposition', 'attachment; filename="stremula-ca.crt"');
+                res.sendFile(caPath);
+            } else {
+                res.status(404).json({ error: 'CA certificate not found' });
+            }
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to serve CA certificate' });
+        }
+    });
+    
     // Mount Stremio addon router
     const router = getRouter({ manifest, get: builder.getInterface().get });
     app.use('/', router);
@@ -757,8 +774,12 @@ async function startServer() {
                     console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
                     console.log(`   (Replace YOUR_IP with your device's IP address)`);
                 }
-                console.log(`\n⚠️  Note: Self-signed certificate will show a security warning`);
-                console.log(`   This is normal for local development. You can safely proceed.`);
+                console.log(`\n🔐 Certificate Authority (CA) Certificate:`);
+                console.log(`   Download: https://YOUR_IP:${httpsPort}/ca.crt`);
+                console.log(`   Install this CA certificate on your devices to trust the server certificate`);
+                console.log(`   📱 macOS: Double-click ca.crt → Keychain Access → Trust → Always Trust`);
+                console.log(`   📱 iOS/tvOS: Install via Configuration Profile (see README)`);
+                console.log(`\n⚠️  Without CA installation, browsers will show security warnings`);
             });
         } catch (error) {
             console.error('❌ Failed to start HTTPS server:', error);
