@@ -200,6 +200,39 @@ subjectAltName = @alt_names
         const cert = fs.readFileSync(CERT_PATH, 'utf8');
         const key = fs.readFileSync(KEY_PATH, 'utf8');
         
+        // Verify the certificate includes all required IPs
+        try {
+            const certText = execSync(`openssl x509 -in "${CERT_PATH}" -text -noout 2>/dev/null`, { encoding: 'utf8' });
+            const sanMatch = certText.match(/X509v3 Subject Alternative Name:\s*\n\s*([^\n]+(?:\n\s*[^\n]+)*)/);
+            if (sanMatch) {
+                const sanContent = sanMatch[1];
+                console.log('   ✅ Certificate SAN verified:', sanContent.replace(/\s+/g, ' ').trim());
+                
+                // Check if all IPs are present
+                const missingIPs = [];
+                for (const ip of ipAddresses) {
+                    if (!sanContent.includes(ip)) {
+                        missingIPs.push(ip);
+                    }
+                }
+                if (missingIPs.length > 0) {
+                    console.log(`   ⚠️  Warning: Certificate missing IPs: ${missingIPs.join(', ')}`);
+                } else {
+                    console.log('   ✅ All IP addresses verified in certificate');
+                }
+            }
+        } catch (verifyError) {
+            console.log('   ⚠️  Could not verify certificate contents');
+        }
+        
+        console.log('✅ Self-signed certificate generated successfully');
+        console.log('⚠️  Note: Browsers will show a security warning for self-signed certificates');
+        console.log('   This is normal for local development. You can safely proceed.');
+        console.log('   💡 If you still see certificate errors, try:');
+        console.log('      1. Clear your browser cache and cookies for this site');
+        console.log('      2. In Safari: Click "Show Details" → "visit this website" → Accept');
+        console.log('      3. Hard refresh the page (Cmd+Shift+R on Mac)');
+        
         return {
             key: key,
             cert: cert
