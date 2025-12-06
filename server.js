@@ -7,7 +7,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
-const { getCertificates, getCACertificatePath } = require('./cert-ca-utils');
+const { getCertificates, getCACertificatePath } = require('./cert-mkcert-utils');
 
 // Initialize database
 let databaseReady = false;
@@ -774,12 +774,13 @@ async function startServer() {
                     console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
                     console.log(`   (Replace YOUR_IP with your device's IP address)`);
                 }
-                console.log(`\n🔐 Certificate Authority (CA) Certificate:`);
+                console.log(`\n🔐 mkcert CA Certificate:`);
                 console.log(`   Download: https://YOUR_IP:${httpsPort}/ca.crt`);
-                console.log(`   Install this CA certificate on your devices to trust the server certificate`);
+                console.log(`   Install this CA certificate on other devices to trust the server certificate`);
                 console.log(`   📱 macOS: Double-click ca.crt → Keychain Access → Trust → Always Trust`);
-                console.log(`   📱 iOS/tvOS: Install via Configuration Profile (see README)`);
-                console.log(`\n⚠️  Without CA installation, browsers will show security warnings`);
+                console.log(`   📱 iOS: Settings → General → About → Certificate Trust Settings`);
+                console.log(`   📱 See MKCERT_SETUP.md for detailed instructions`);
+                console.log(`\n✅ Certificates are automatically trusted on this machine (mkcert installed)`);
             });
         } catch (error) {
             console.error('❌ Failed to start HTTPS server:', error);
