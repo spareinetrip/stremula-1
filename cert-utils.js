@@ -128,31 +128,100 @@ async function generateSelfSignedCert(forceRegenerate = false) {
         });
     }
 
-    // Generate certificate (returns a Promise in v5.x)
-    const attrs = [{ name: 'commonName', value: 'localhost' }];
-    const pems = await selfsigned.generate(attrs, {
-        keySize: 2048,
-        days: 365,
-        algorithm: 'sha256',
-        extensions: [
-            {
-                name: 'basicConstraints',
-                cA: false
-            },
-            {
-                name: 'keyUsage',
-                keyUsage: ['digitalSignature', 'keyEncipherment']
-            },
-            {
-                name: 'subjectAltName',
-                altNames: altNames
+    // Use openssl directly to generate certificate with all IPs
+    // The selfsigned library v5.x ignores custom extensions, so we use openssl instead
+    try {
+        // Generate private key
+        execSync(`openssl genrsa -out "${KEY_PATH}" 2048`, { stdio: 'inherit' });
+        
+        // Create certificate config with all IPs
+        const configPath = path.join(CERT_DIR, 'cert.conf');
+        const dnsNames = [];
+        const ipAddresses = [];
+        
+        for (const name of altNames) {
+            if (name === 'localhost' || (!/^(\d{1,3}\.){3}\d{1,3}$/.test(name) && name !== '127.0.0.1')) {
+                dnsNames.push(name);
+            } else {
+                ipAddresses.push(name);
             }
-        ]
-    });
+        }
+        
+        let configContent = `[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
 
-    // Save certificates
-    fs.writeFileSync(KEY_PATH, pems.private);
-    fs.writeFileSync(CERT_PATH, pems.cert);
+[req_distinguished_name]
+CN = localhost
+
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+`;
+        
+        // Add DNS names
+        dnsNames.forEach((dns, index) => {
+            configContent += `DNS.${index + 1} = ${dns}\n`;
+        });
+        
+        // Add IP addresses
+        ipAddresses.forEach((ip, index) => {
+            configContent += `IP.${index + 1} = ${ip}\n`;
+        });
+        
+        fs.writeFileSync(configPath, configContent);
+        
+        // Generate certificate signing request
+        execSync(
+            `openssl req -new -key "${KEY_PATH}" -out "${path.join(CERT_DIR, 'server.csr')}" -config "${configPath}"`,
+            { stdio: 'inherit' }
+        );
+        
+        // Generate self-signed certificate (valid for 365 days)
+        execSync(
+            `openssl x509 -req -days 365 -in "${path.join(CERT_DIR, 'server.csr')}" -signkey "${KEY_PATH}" -out "${CERT_PATH}" -extensions v3_req -extfile "${configPath}"`,
+            { stdio: 'inherit' }
+        );
+        
+        // Clean up temporary files
+        if (fs.existsSync(path.join(CERT_DIR, 'server.csr'))) {
+            fs.unlinkSync(path.join(CERT_DIR, 'server.csr'));
+        }
+        if (fs.existsSync(configPath)) {
+            fs.unlinkSync(configPath);
+        }
+        
+        // Read the generated certificate and key
+        const cert = fs.readFileSync(CERT_PATH, 'utf8');
+        const key = fs.readFileSync(KEY_PATH, 'utf8');
+        
+        return {
+            key: key,
+            cert: cert
+        };
+    } catch (error) {
+        // Fallback to selfsigned library if openssl fails
+        console.log('⚠️  openssl not available, falling back to selfsigned library (limited IP support)');
+        const attrs = [{ name: 'commonName', value: 'localhost' }];
+        const pems = await selfsigned.generate(attrs, {
+            keySize: 2048,
+            days: 365,
+            algorithm: 'sha256'
+        });
+        
+        fs.writeFileSync(KEY_PATH, pems.private);
+        fs.writeFileSync(CERT_PATH, pems.cert);
+        
+        return {
+            key: pems.private,
+            cert: pems.cert
+        };
+    }
 
     console.log('✅ Self-signed certificate generated successfully');
     console.log('⚠️  Note: Browsers will show a security warning for self-signed certificates');
