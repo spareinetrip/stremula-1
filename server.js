@@ -1,10 +1,12 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
+const { getCertificates } = require('./cert-utils');
 
 // Initialize database
 let databaseReady = false;
@@ -23,6 +25,7 @@ const RESTART_CONFIG = {
 let restartAttempts = [];
 let isRestarting = false;
 let httpServerInstance = null;
+let httpsServerInstance = null;
 let errorHandlersSetup = false;
 
 // Helper function to convert slug to GP name
@@ -473,24 +476,51 @@ function handleCriticalError(type, error) {
 // Gracefully shutdown servers
 function shutdownServers(callback) {
     isRestarting = true;
+    let shutdownCount = 0;
+    const totalServers = (httpServerInstance ? 1 : 0) + (httpsServerInstance ? 1 : 0);
 
-    if (!httpServerInstance) {
+    if (totalServers === 0) {
         // Give a small delay to ensure any pending operations complete
         setTimeout(callback, 500);
         return;
     }
 
-    // Stop accepting new connections
-    httpServerInstance.close(() => {
-        console.log('✅ HTTP server closed');
-        httpServerInstance = null;
-        // Additional delay to ensure port is fully released
-        console.log('⏳ Waiting for port to be released...');
-        setTimeout(callback, 1000);
-    });
-    
-    // Also close all existing connections
-    httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
+    const checkShutdown = () => {
+        shutdownCount++;
+        if (shutdownCount >= totalServers) {
+            // Additional delay to ensure port is fully released
+            console.log('⏳ Waiting for port to be released...');
+            setTimeout(callback, 1000);
+        }
+    };
+
+    if (httpServerInstance) {
+        // Stop accepting new connections
+        httpServerInstance.close(() => {
+            console.log('✅ HTTP server closed');
+            httpServerInstance = null;
+            checkShutdown();
+        });
+        
+        // Also close all existing connections
+        httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
+    } else {
+        checkShutdown();
+    }
+
+    if (httpsServerInstance) {
+        // Stop accepting new connections
+        httpsServerInstance.close(() => {
+            console.log('✅ HTTPS server closed');
+            httpsServerInstance = null;
+            checkShutdown();
+        });
+        
+        // Also close all existing connections
+        httpsServerInstance.closeAllConnections && httpsServerInstance.closeAllConnections();
+    } else {
+        checkShutdown();
+    }
 
     // Force close after timeout
     setTimeout(() => {
@@ -498,6 +528,11 @@ function shutdownServers(callback) {
             httpServerInstance.close();
             httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
             httpServerInstance = null;
+        }
+        if (httpsServerInstance) {
+            httpsServerInstance.close();
+            httpsServerInstance.closeAllConnections && httpsServerInstance.closeAllConnections();
+            httpsServerInstance = null;
         }
         callback();
     }, 10000);
@@ -575,9 +610,10 @@ async function startServer() {
         try {
             const host = req.headers.host;
             if (host) {
-                // Always use HTTP for local network access (no certificate issues)
-                // This works for both localhost and IP addresses
-                const proto = 'http';
+                // Determine protocol based on request
+                // Use HTTPS if available, otherwise HTTP
+                const isLocal = isLocalhost(host);
+                const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
                 // Update dynamic base URL based on the request
                 // This ensures images use the correct host and protocol
                 dynamicBaseUrl = `${proto}://${host}`;
@@ -613,8 +649,10 @@ async function startServer() {
             },
             installUrls: {
                 localhost: `http://localhost:${httpPort}/manifest.json`,
-                localNetwork: ips.map(ip => `http://${ip}:${httpPort}/manifest.json`)
-            }
+                localNetworkHTTP: ips.map(ip => `http://${ip}:${httpPort}/manifest.json`),
+                localNetworkHTTPS: ips.map(ip => `https://${ip}:${httpPort + 1}/manifest.json`)
+            },
+            note: 'Stremio web requires HTTPS for network access. Use desktop app for HTTP. Note: Browsers may block web.stremio.com from accessing local IPs.'
         });
     });
     
@@ -634,7 +672,18 @@ async function startServer() {
     const router = getRouter({ manifest, get: builder.getInterface().get });
     app.use('/', router);
     
-    // Start HTTP server on all interfaces for local network access (no certificate issues)
+    // Get SSL certificates for HTTPS (required for Stremio web)
+    let sslOptions = null;
+    try {
+        sslOptions = await getCertificates();
+        console.log('✅ SSL certificates loaded');
+    } catch (error) {
+        console.error('⚠️  Failed to load SSL certificates:', error.message);
+        console.error('   HTTPS will not be available. Stremio web requires HTTPS for network access.');
+        console.error('   Use Stremio desktop app for HTTP access, or configure HTTPS certificates.');
+    }
+    
+    // Start HTTP server on all interfaces for local network access
     httpServerInstance = http.createServer(app);
     
     // Add error handler to prevent crashes from propagating
@@ -681,10 +730,18 @@ async function startServer() {
             console.log(`   http://127.0.0.1:${httpPort}/manifest.json`);
             
             if (ips.length > 0) {
-                console.log(`\n📡 Install in Stremio (local network - iOS compatible):`);
+                console.log(`\n📡 Install in Stremio Desktop (HTTP - local network):`);
                 ips.forEach(ip => {
                     console.log(`   http://${ip}:${httpPort}/manifest.json`);
                 });
+                if (httpsServerInstance) {
+                    console.log(`\n📡 Install in Stremio Web (HTTPS - required for web.stremio.com):`);
+                    ips.forEach(ip => {
+                        console.log(`   https://${ip}:${httpPort + 1}/manifest.json`);
+                    });
+                    console.log(`\n⚠️  Note: You'll need to accept the self-signed certificate warning`);
+                    console.log(`   First visit https://${ips[0]}:${httpPort + 1}/ in your browser and accept the certificate`);
+                }
                 console.log(`\n🔍 Test server access:`);
                 ips.forEach(ip => {
                     console.log(`   http://${ip}:${httpPort}/`);
@@ -694,11 +751,15 @@ async function startServer() {
                 console.log(`   http://YOUR_IP:${httpPort}/manifest.json`);
                 console.log(`   (Replace YOUR_IP with your device's IP address)`);
             }
-            console.log(`\n✅ Using HTTP for local network access (no certificate issues)`);
-            console.log(`\n⚠️  If you can't access from other devices:`);
+            console.log(`\n✅ HTTP server running (works with Stremio desktop app)`);
+            if (!httpsServerInstance) {
+                console.log(`\n⚠️  HTTPS not available - Stremio web requires HTTPS for network access`);
+                console.log(`   Use Stremio desktop app for HTTP, or configure HTTPS certificates`);
+            }
+            console.log(`\n💡 Troubleshooting:`);
             console.log(`   1. Make sure you include the port: http://IP:${httpPort}`);
             console.log(`   2. Check firewall: sudo ufw allow ${httpPort}/tcp`);
-            console.log(`   3. Verify server is running: curl http://localhost:${httpPort}/health`);
+            console.log(`   3. Verify server: curl http://localhost:${httpPort}/health`);
             console.log(`   4. Check if server is listening: netstat -tuln | grep ${httpPort}`);
         });
         
@@ -706,7 +767,7 @@ async function startServer() {
         httpServerInstance.on('listening', () => {
             const address = httpServerInstance.address();
             if (address) {
-                console.log(`✅ Server confirmed listening on ${address.address}:${address.port}`);
+                console.log(`✅ HTTP server confirmed listening on ${address.address}:${address.port}`);
             }
         });
     } catch (error) {
@@ -715,7 +776,74 @@ async function startServer() {
         return;
     }
     
-    console.log(`📊 Database ready: ${databaseReady}`);
+    // Start HTTPS server for Stremio web (if certificates available)
+    if (sslOptions) {
+        const httpsPort = httpPort + 1;
+        httpsServerInstance = https.createServer(sslOptions, app);
+        
+        httpsServerInstance.on('error', (error) => {
+            if (error.code === 'EADDRINUSE') {
+                console.error(`\n❌ Port ${httpsPort} is already in use.`);
+                console.error(`   HTTPS server will not start.`);
+            } else {
+                console.error('❌ HTTPS server error:', error);
+            }
+        });
+        
+        httpsServerInstance.on('clientError', (err, socket) => {
+            // Suppress expected SSL certificate errors (self-signed cert rejections)
+            const errorMsg = err.message || '';
+            if (errorMsg.includes('certificate unknown') || 
+                errorMsg.includes('sslv3 alert certificate unknown') ||
+                errorMsg.includes('SSL alert number 46')) {
+                socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+                return;
+            }
+            socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+        });
+        
+        try {
+            httpsServerInstance.listen(httpsPort, '0.0.0.0', () => {
+                const address = httpsServerInstance.address();
+                console.log(`\n🔒 HTTPS server running on port ${httpsPort} (all interfaces)`);
+                console.log(`   Listening on: ${address.address}:${address.port}`);
+                
+                const os = require('os');
+                const interfaces = os.networkInterfaces();
+                const ips = [];
+                for (const name of Object.keys(interfaces)) {
+                    for (const iface of interfaces[name]) {
+                        if (iface.family === 'IPv4' && !iface.internal) {
+                            ips.push(iface.address);
+                        }
+                    }
+                }
+                
+                if (ips.length > 0) {
+                    console.log(`\n📡 HTTPS URLs for Stremio web:`);
+                    ips.forEach(ip => {
+                        console.log(`   https://${ip}:${httpsPort}/manifest.json`);
+                    });
+                    console.log(`\n⚠️  IMPORTANT: Before adding to Stremio web:`);
+                    console.log(`   1. Visit https://${ips[0]}:${httpsPort}/ in your browser`);
+                    console.log(`   2. Accept the security warning (Advanced → Proceed)`);
+                    console.log(`   3. Then add the addon URL in Stremio`);
+                }
+            });
+            
+            httpsServerInstance.on('listening', () => {
+                const address = httpsServerInstance.address();
+                if (address) {
+                    console.log(`✅ HTTPS server confirmed listening on ${address.address}:${address.port}`);
+                }
+            });
+        } catch (error) {
+            console.error('❌ Failed to start HTTPS server:', error);
+            console.error('⚠️  HTTP server continues running');
+        }
+    }
+    
+    console.log(`\n📊 Database ready: ${databaseReady}`);
     console.log(`🔄 Auto-restart enabled (max ${RESTART_CONFIG.maxRestarts} restarts per ${RESTART_CONFIG.restartWindowMs/1000}s)`);
 }
 
