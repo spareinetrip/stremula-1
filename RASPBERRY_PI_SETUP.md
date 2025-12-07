@@ -1,6 +1,6 @@
 # Raspberry Pi Setup Guide for Stremula 1
 
-Complete setup guide for running Stremula 1 on Raspberry Pi with automatic startup and easy access via Stremio.
+Complete setup guide for running Stremula 1 on Raspberry Pi with automatic startup and Localtunnel integration.
 
 ## 📋 Prerequisites
 
@@ -108,42 +108,12 @@ You should see versions like `v20.x.x` and `10.x.x`.
 
 ---
 
-## Part 4: Downloading the Project
+## Part 4: Installing Stremula 1
 
-### Choosing Installation Location
-
-**Option A: Home Directory (`~/stremula-1`)** - **Simpler**
-- ✅ No permission issues
-- ✅ Easy to manage
-- ❌ Can clutter home directory if you run many services
-
-**Option B: `/opt/stremula-1`** - **Recommended for multiple services**
-- ✅ Standard Linux location for optional software
-- ✅ Keeps home directory clean
-- ✅ Better organization
-- ⚠️ Requires `sudo` for installation
-
-**Recommendation:** If you plan to run multiple services, use `/opt`. Otherwise, home directory is fine.
-
-### Using Git (Recommended)
-
-**Option A: Install in Home Directory**
+### Step 1: Clone the Repository
 
 ```bash
-# Navigate to home directory
-cd ~
-
-# Clone the repository (replace with your actual GitHub repo URL)
-git clone https://github.com/YOUR_USERNAME/stremula-1.git
-
-# Navigate into the project directory
-cd stremula-1
-```
-
-**Option B: Install in /opt**
-
-```bash
-# Clone to /opt (requires sudo)
+# Clone to /opt (standard location for optional software)
 sudo git clone https://github.com/YOUR_USERNAME/stremula-1.git /opt/stremula-1
 
 # Fix ownership so you can manage it without sudo
@@ -155,33 +125,22 @@ cd /opt/stremula-1
 
 **Note:** Replace `https://github.com/YOUR_USERNAME/stremula-1.git` with your actual GitHub repository URL.
 
-**⚠️ Important:** If you install in `/opt`, remember to update the `WorkingDirectory` path in the systemd service files (Part 6) from `/home/pi/stremula-1` to `/opt/stremula-1`.
-
----
-
-## Part 5: Installing and Configuring Stremula 1
-
-### Step 1: Navigate to Project Directory
-
-**If installed in home directory:**
-```bash
-cd ~/stremula-1
-```
-
-**If installed in /opt:**
-```bash
-cd /opt/stremula-1
-```
-
 ### Step 2: Install Dependencies
 
 ```bash
+cd /opt/stremula-1
 npm install
 ```
 
 This will take a few minutes. Wait for it to complete.
 
-### Step 3: Generate Configuration File
+### Step 3: Install Localtunnel
+
+```bash
+sudo npm install -g localtunnel
+```
+
+### Step 4: Generate Configuration File
 
 The `config.json` file is automatically created on first run:
 
@@ -193,12 +152,12 @@ npm start
 
 Wait a few seconds, then press `Ctrl + C` to stop the services.
 
-### Step 4: Configure the Addon
+### Step 5: Configure the Addon
 
 Edit the configuration file:
 
 ```bash
-nano config.json
+nano /opt/stremula-1/config.json
 ```
 
 **Fill in your credentials:**
@@ -210,14 +169,14 @@ nano config.json
   - `password`: Your Reddit password
   - `userAgent`: Should match your Reddit username (e.g., `"Stremula1/3.0 (by u/yourusername)"`)
 - Set `realdebrid.enabled` to `true`
-- Leave `publicBaseUrl` empty for now (or set to Localtunnel URL if using it)
+- **Leave `publicBaseUrl` empty** - it will be automatically updated by the tunnel service
 
 **To save in nano:**
 - Press `Ctrl + X`
 - Press `Y` to confirm
 - Press `Enter` to save
 
-### Step 5: Test the Installation
+### Step 6: Test the Installation
 
 ```bash
 npm start
@@ -231,45 +190,21 @@ You should see output from both services:
 
 ---
 
-## Part 6: Running Stremula 1 Automatically
+## Part 5: Setting Up Automatic Startup
 
-You want Stremula 1 to start automatically when your Pi boots. We'll use systemd (the service manager).
+We'll create a single systemd service that runs everything together.
 
-You have two options: a single service that runs both components, or separate services for better monitoring. We recommend **Option B (separate services)** for production use.
-
-### Option A: Single Service (Simpler)
-
-This runs both the server and fetcher together in one service:
+### Step 1: Create the Service File
 
 ```bash
 sudo nano /etc/systemd/system/stremula.service
 ```
 
-**Paste this content** (adjust the path based on where you installed):
+**Paste this content:**
 
-**If installed in home directory (`~/stremula-1`):**
 ```ini
 [Unit]
-Description=Stremula 1 (Server + Fetcher)
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/stremula-1
-ExecStart=/usr/bin/npm start
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**If installed in `/opt/stremula-1`:**
-```ini
-[Unit]
-Description=Stremula 1 (Server + Fetcher)
+Description=Stremula 1 (Server + Fetcher + Tunnel)
 After=network.target
 
 [Service]
@@ -289,121 +224,25 @@ WantedBy=multi-user.target
 
 Save and exit (`Ctrl + X`, `Y`, `Enter`).
 
-Then enable and start:
+### Step 2: Create the Tunnel Service
 
 ```bash
-# Reload systemd to recognize new service
-sudo systemctl daemon-reload
-
-# Enable service to start on boot
-sudo systemctl enable stremula
-
-# Start the service now
-sudo systemctl start stremula
+sudo nano /etc/systemd/system/stremula-tunnel.service
 ```
 
-**Check status:**
-```bash
-sudo systemctl status stremula
-```
+**Paste this content:**
 
-**View logs:**
-```bash
-sudo journalctl -u stremula -f
-```
-
-### Option B: Separate Services (Recommended for Production)
-
-This creates separate services for the server and fetcher, allowing independent monitoring and control:
-
-**Step 1: Create Service Files**
-
-Create the server service:
-
-```bash
-sudo nano /etc/systemd/system/stremula-server.service
-```
-
-**Paste this content** (adjust the path based on where you installed):
-
-**If installed in home directory (`~/stremula-1`):**
 ```ini
 [Unit]
-Description=Stremula 1 Stremio Server
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/stremula-1
-ExecStart=/usr/bin/node server.js
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**If installed in `/opt/stremula-1`:**
-```ini
-[Unit]
-Description=Stremula 1 Stremio Server
-After=network.target
+Description=Stremula 1 Localtunnel
+After=network.target stremula.service
+Requires=stremula.service
 
 [Service]
 Type=simple
 User=pi
 WorkingDirectory=/opt/stremula-1
-ExecStart=/usr/bin/node server.js
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Save and exit.
-
-Create the fetcher service:
-
-```bash
-sudo nano /etc/systemd/system/stremula-fetcher.service
-```
-
-**Paste this content** (adjust the path based on where you installed):
-
-**If installed in home directory (`~/stremula-1`):**
-```ini
-[Unit]
-Description=Stremula 1 Fetcher Service
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/stremula-1
-ExecStart=/usr/bin/node fetcher-service.js
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**If installed in `/opt/stremula-1`:**
-```ini
-[Unit]
-Description=Stremula 1 Fetcher Service
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/opt/stremula-1
-ExecStart=/usr/bin/node fetcher-service.js
+ExecStart=/usr/bin/node start-tunnel.js
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
@@ -416,49 +255,85 @@ WantedBy=multi-user.target
 
 Save and exit.
 
-**Step 2: Enable and Start Services**
+### Step 3: Enable and Start Services
 
 ```bash
 # Reload systemd to recognize new services
 sudo systemctl daemon-reload
 
 # Enable services to start on boot
-sudo systemctl enable stremula-server
-sudo systemctl enable stremula-fetcher
+sudo systemctl enable stremula
+sudo systemctl enable stremula-tunnel
 
 # Start the services now
-sudo systemctl start stremula-server
-sudo systemctl start stremula-fetcher
+sudo systemctl start stremula
+sudo systemctl start stremula-tunnel
 ```
 
-**Step 3: Check Service Status**
+### Step 4: Check Service Status
 
 ```bash
-# Check server status
-sudo systemctl status stremula-server
+# Check main service status
+sudo systemctl status stremula
 
-# Check fetcher status
-sudo systemctl status stremula-fetcher
+# Check tunnel service status
+sudo systemctl status stremula-tunnel
 ```
 
 You should see `active (running)` in green for both services.
 
 **To view logs:**
 ```bash
-# Server logs
-sudo journalctl -u stremula-server -f
+# Main service logs
+sudo journalctl -u stremula -f
 
-# Fetcher logs
-sudo journalctl -u stremula-fetcher -f
+# Tunnel service logs (to see your tunnel URL)
+sudo journalctl -u stremula-tunnel -f
 
 # Press Ctrl + C to exit log view
 ```
 
-**Why choose separate services?**
-- Monitor each service independently
-- Restart services individually if needed
-- See separate logs for easier debugging
-- Better control over each component
+**To get your tunnel URL:**
+```bash
+sudo journalctl -u stremula-tunnel -n 50 | grep "https://"
+```
+
+The tunnel URL will be automatically saved to `config.json`. Your unique subdomain will be something like `stremula-1-raspberrypi-abc123.loca.lt`.
+
+---
+
+## Part 6: Installing in Stremio
+
+### Get Your Tunnel URL
+
+The tunnel service automatically creates a unique URL for your installation. To find it:
+
+```bash
+# View recent tunnel logs
+sudo journalctl -u stremula-tunnel -n 50 | grep "https://"
+```
+
+Or check your `config.json`:
+
+```bash
+cat /opt/stremula-1/config.json | grep publicBaseUrl
+```
+
+You'll see something like: `"publicBaseUrl": "https://stremula-1-raspberrypi-abc123.loca.lt"`
+
+### Add to Stremio
+
+1. **Open Stremio** (Desktop or Web)
+2. **Go to Addons** → **Community Addons**
+3. **Click the "+" button**
+4. **Enter your tunnel URL:**
+   ```
+   https://stremula-1-raspberrypi-abc123.loca.lt/manifest.json
+   ```
+   (Replace with your actual tunnel URL)
+5. **Click "Install"**
+
+**That's it!** The addon is now accessible from anywhere with no certificate warnings.
 
 ---
 
@@ -466,18 +341,9 @@ sudo journalctl -u stremula-fetcher -f
 
 To populate your database with past F1 weekends:
 
-**If installed in home directory:**
-```bash
-cd ~/stremula-1
-```
-
-**If installed in /opt:**
 ```bash
 cd /opt/stremula-1
-```
 
-Then run:
-```bash
 # Fetch any number of weekends (replace X with your desired number)
 node cli.js --fetchXp
 
@@ -494,193 +360,37 @@ npm run fetch24p
 
 ---
 
-## Part 8: Installing in Stremio
-
-**⚠️ Important:** Stremio requires HTTPS for network access. HTTP only works for localhost. For all network access (local network and public web), use Localtunnel.
-
-### Option A: Localhost Access (Same Device Only)
-
-If you're running Stremio on the same Raspberry Pi:
-
-1. Open Stremio on your Pi
-2. Go to **Addons** → **Community Addons**
-3. Click the **"+"** button
-4. Enter: `http://localhost:7003/manifest.json`
-5. Click **"Install"**
-
-**Note:** This only works when Stremio and the server are on the same device.
-
-### Option B: Network Access via Localtunnel (Recommended)
-
-**Use Localtunnel for all network access** - local network, public web, Stremio Desktop, and Stremio Web. Localtunnel provides HTTPS with valid certificates - no warnings, works everywhere.
-
-**🔒 Benefits:**
-- ✅ **No certificate warnings** - Valid SSL certificates (Let's Encrypt)
-- ✅ **Works everywhere** - Stremio Desktop, Stremio Web, iOS, Android
-- ✅ **No port forwarding** - Works behind any router/NAT
-- ✅ **No firewall config** - No need to open ports
-- ✅ **Free and easy** - No signup required
-- ✅ **Works on local network** - Access from any device on your WiFi
-- ✅ **Works on public web** - Access from anywhere
-
-**Setup Steps:**
-
-1. **Install Localtunnel:**
-   ```bash
-   sudo npm install -g localtunnel
-   ```
-
-2. **Start your Stremula server** (if not already running):
-   ```bash
-   # If using systemd, it should already be running
-   # If not, start it:
-   sudo systemctl start stremula-server
-   # or if using single service:
-   sudo systemctl start stremula
-   ```
-
-3. **Start the tunnel** in a separate terminal:
-   ```bash
-   lt --port 7003
-   ```
-
-4. **You'll see output like:**
-   ```
-   your url is: https://random-name.loca.lt
-   ```
-
-5. **Update config.json** (recommended for media URLs):
-   ```bash
-   # If in home directory:
-   nano ~/stremula-1/config.json
-   
-   # If in /opt:
-   nano /opt/stremula-1/config.json
-   ```
-   Set `publicBaseUrl` to your tunnel URL:
-   ```json
-   "server": {
-     "port": 7003,
-     "publicBaseUrl": "https://random-name.loca.lt"
-   }
-   ```
-   Save and restart the server if needed.
-
-6. **Add to Stremio:**
-   - Open Stremio (Desktop or Web)
-   - Go to **Addons** → **Community Addons**
-   - Click the **"+"** button
-   - Enter: `https://random-name.loca.lt/manifest.json`
-   - Click **"Install"**
-
-**Running Localtunnel as a Systemd Service (Recommended for Production):**
-
-For permanent access that starts automatically, run Localtunnel as a systemd service:
-
-```bash
-sudo nano /etc/systemd/system/stremula-tunnel.service
-```
-
-Paste:
-```ini
-[Unit]
-Description=Stremula 1 Localtunnel
-After=network.target stremula-server.service
-Requires=stremula-server.service
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi
-ExecStart=/usr/bin/lt --port 7003
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**Note:** Adjust paths and username as needed. The tunnel URL will still change on restart, but it will automatically restart with the server.
-
-Then:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable stremula-tunnel
-sudo systemctl start stremula-tunnel
-```
-
-**Note:** The tunnel URL changes each time you restart it. For a permanent URL, consider using a paid tunneling service or setting up your own domain with HTTPS.
-
----
-
 ## 🔧 Useful Commands Reference
 
 ### Managing Services
 
-**If using separate services (Option B):**
-
 ```bash
 # Start services
-sudo systemctl start stremula-server
-sudo systemctl start stremula-fetcher
-sudo systemctl start stremula-tunnel  # If using Localtunnel service
+sudo systemctl start stremula
+sudo systemctl start stremula-tunnel
 
 # Stop services
-sudo systemctl stop stremula-server
-sudo systemctl stop stremula-fetcher
+sudo systemctl stop stremula
 sudo systemctl stop stremula-tunnel
 
 # Restart services
-sudo systemctl restart stremula-server
-sudo systemctl restart stremula-fetcher
+sudo systemctl restart stremula
 sudo systemctl restart stremula-tunnel
 
 # Check status
-sudo systemctl status stremula-server
-sudo systemctl status stremula-fetcher
+sudo systemctl status stremula
 sudo systemctl status stremula-tunnel
 
 # View logs
-sudo journalctl -u stremula-server -f
-sudo journalctl -u stremula-fetcher -f
-sudo journalctl -u stremula-tunnel -f  # To see the tunnel URL
-```
-
-**If using single service (Option A):**
-
-```bash
-# Start service
-sudo systemctl start stremula
-
-# Stop service
-sudo systemctl stop stremula
-
-# Restart service
-sudo systemctl restart stremula
-
-# Check status
-sudo systemctl status stremula
-
-# View logs
 sudo journalctl -u stremula -f
+sudo journalctl -u stremula-tunnel -f
 ```
 
 ### Updating Your Project
 
-If you make changes to the code on GitHub:
-
-**If installed in home directory:**
-```bash
-cd ~/stremula-1
-```
-
-**If installed in /opt:**
 ```bash
 cd /opt/stremula-1
-```
 
-Then run:
-```bash
 # Pull latest changes from GitHub
 git pull
 
@@ -688,114 +398,103 @@ git pull
 npm install
 
 # Restart services
-# If using separate services:
-sudo systemctl restart stremula-server
-sudo systemctl restart stremula-fetcher
-
-# If using single service:
 sudo systemctl restart stremula
+sudo systemctl restart stremula-tunnel
 ```
 
-### Finding Your Pi's IP Address
+### Finding Your Tunnel URL
 
 ```bash
-# On the Pi
-hostname -I
+# Method 1: From logs
+sudo journalctl -u stremula-tunnel -n 50 | grep "https://"
+
+# Method 2: From config file
+cat /opt/stremula-1/config.json | grep publicBaseUrl
+
+# Method 3: Check device ID
+cat /opt/stremula-1/.device-id
+# Then use: https://stremula-1-{device-id}.loca.lt/manifest.json
 ```
 
 ### Testing the Server
 
 ```bash
-# From your Mac or any device on the network
-curl http://YOUR_PI_IP:7003/manifest.json
-
 # Health check
-curl http://YOUR_PI_IP:7003/health
+curl http://localhost:7003/health
+
+# Server info
+curl http://localhost:7003/
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Can't connect via SSH
-
-1. **Check if SSH is enabled:**
-   - If you have a monitor/keyboard connected, run: `sudo systemctl enable ssh`
-   - Or re-flash the SD card with SSH enabled in Raspberry Pi Imager
-
-2. **Check your Pi's IP address:**
-   - Connect a monitor and run: `hostname -I`
-
-3. **Check if Pi is on the same network:**
-   - Both your computer and Pi must be on the same WiFi/Ethernet network
-
 ### Services won't start
 
 1. **Check the logs:**
    ```bash
-   # If using separate services:
-   sudo journalctl -u stremula-server -n 50
-   sudo journalctl -u stremula-fetcher -n 50
-   
-   # If using single service:
    sudo journalctl -u stremula -n 50
+   sudo journalctl -u stremula-tunnel -n 50
    ```
 
 2. **Check file paths:**
-   - Make sure the `WorkingDirectory` in service files matches where you installed the project
+   - Make sure the `WorkingDirectory` in service files is `/opt/stremula-1`
    - Verify Node.js path: `which node` (should be `/usr/bin/node`)
 
 3. **Check permissions:**
    ```bash
-   # Make sure the pi user owns the directory
-   # If in home directory:
-   sudo chown -R pi:pi ~/stremula-1
-   
-   # If in /opt:
-   sudo chown -R pi:pi /opt/stremula-1
+   sudo chown -R $USER:$USER /opt/stremula-1
    ```
-   (Replace `pi` with your actual username)
+   (Replace `$USER` with your actual username)
 
-### Can't access from Stremio
+### Tunnel not working
 
-1. **Verify server is running:**
+1. **Check if Localtunnel is installed:**
    ```bash
-   curl http://localhost:7003/manifest.json
+   which lt
    ```
+   If not found: `sudo npm install -g localtunnel`
 
-2. **Check Localtunnel is running:**
-   ```bash
-   sudo systemctl status stremula-tunnel
-   # Or if running manually, check the terminal output for the URL
-   ```
-
-3. **Check publicBaseUrl in config.json:**
-   - Should be set to your Localtunnel URL: `https://random-name.loca.lt`
-   - Get the URL from tunnel logs: `sudo journalctl -u stremula-tunnel -n 20`
-
-### Localtunnel not working
-
-1. **Make sure server is running:**
-   ```bash
-   sudo systemctl status stremula-server
-   ```
-
-2. **Check if port 7003 is accessible:**
+2. **Check if server is running:**
    ```bash
    curl http://localhost:7003/health
    ```
 
-3. **Try restarting the tunnel:**
+3. **Check tunnel logs:**
    ```bash
-   # Stop tunnel
-   sudo systemctl stop stremula-tunnel
-   
-   # Start tunnel
-   sudo systemctl start stremula-tunnel
-   
-   # Check logs
    sudo journalctl -u stremula-tunnel -f
    ```
+
+4. **Check firewall:**
+   ```bash
+   sudo ufw status
+   ```
+   Localtunnel needs outbound connections - ufw should allow outgoing by default.
+
+### Can't access from Stremio
+
+1. **Verify tunnel URL:**
+   ```bash
+   cat /opt/stremula-1/config.json | grep publicBaseUrl
+   ```
+
+2. **Check tunnel is running:**
+   ```bash
+   sudo systemctl status stremula-tunnel
+   ```
+
+3. **Test tunnel URL:**
+   ```bash
+   curl https://YOUR_TUNNEL_URL/manifest.json
+   ```
+
+### Config.json syntax errors
+
+If you see `SyntaxError: Expected ',' or '}'`:
+- Check for extra quotes or commas in `config.json`
+- Validate JSON: `cat /opt/stremula-1/config.json | python3 -m json.tool`
+- Fix any syntax errors and restart: `sudo systemctl restart stremula`
 
 ---
 
@@ -804,6 +503,7 @@ curl http://YOUR_PI_IP:7003/health
 - Your Stremula 1 addon is now running 24/7 on your Raspberry Pi!
 - The fetcher service will automatically check for new F1 posts every 15 minutes
 - The server is always ready to serve content to Stremio
+- The tunnel provides HTTPS access from anywhere with no certificate warnings
 - You can safely disconnect from SSH - the services will keep running
 
 **Enjoy your F1 replays! 🏎️**

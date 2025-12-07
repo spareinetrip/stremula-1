@@ -604,7 +604,6 @@ async function startServer() {
             version: manifest.version,
             port: httpPort,
             database: databaseReady ? 'ready' : 'not ready',
-            localIPs: ips,
             endpoints: {
                 manifest: '/manifest.json',
                 health: '/',
@@ -612,12 +611,7 @@ async function startServer() {
             },
             installUrls: {
                 localhost: `http://localhost:${httpPort}/manifest.json`,
-                note: 'Stremio requires HTTPS for network access. Use Localtunnel for all network access (local and public). See README.md for setup instructions.'
-            },
-            localtunnel: {
-                install: 'npm install -g localtunnel',
-                run: `lt --port ${httpPort}`,
-                note: 'Localtunnel provides HTTPS with valid certificates - no warnings, works everywhere'
+                note: 'For network access, use the Localtunnel URL. Check config.json or tunnel service logs for your unique URL.'
             }
         });
     });

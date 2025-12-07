@@ -1,6 +1,6 @@
 # Stremula 1 - Formula 1 Addon for Stremio
 
-High-quality Sky Sports F1 replays with Real Debrid integration, optimized for Raspberry Pi with persistent database storage.
+High-quality Sky Sports F1 replays with Real Debrid integration, optimized for Raspberry Pi with persistent database storage and automatic Localtunnel integration.
 
 ## 🚀 Features
 
@@ -11,7 +11,7 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 - **Quality Selection**: 4K and 1080p options when available
 - **Session Detection**: Automatically detects Practice, Qualifying, Sprint, and Race sessions
 - **Auto-Restart**: Built-in crash recovery with automatic restart functionality
-- **Easy Access**: Works with Stremio desktop app (HTTP) or web (via Localtunnel)
+- **Automatic HTTPS**: Localtunnel integration provides HTTPS access with valid certificates - no warnings, works everywhere
 
 ## 📋 Requirements
 
@@ -42,37 +42,26 @@ The addon uses Reddit's official API to avoid blocking issues.
 - Node.js version 16 or higher
 - npm (comes with Node.js)
 
+### 4. Raspberry Pi (Recommended)
+- Optimized for Raspberry Pi with systemd service setup
+- Can run on any Linux system with Node.js
+
 ## ⚙️ Installation & Setup
 
-### Step 1: Get the Project
+### Step 1: Install on Raspberry Pi
 
-```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/stremula-1.git
-cd stremula-1
-```
+Follow the complete setup guide: **[RASPBERRY_PI_SETUP.md](./RASPBERRY_PI_SETUP.md)**
 
-### Step 2: Install Dependencies
+**Quick summary:**
+1. Clone repository to `/opt/stremula-1`
+2. Install dependencies: `npm install`
+3. Install Localtunnel: `sudo npm install -g localtunnel`
+4. Configure `config.json` with your credentials
+5. Set up systemd services for automatic startup
 
-```bash
-npm install
-```
+### Step 2: Configure Credentials
 
-### Step 3: Generate Configuration File
-
-The `config.json` file is automatically created on first run:
-
-```bash
-# Run the server briefly to generate config.json
-# Press Ctrl+C after a few seconds to stop it
-npm start
-```
-
-Wait a few seconds, then press `Ctrl + C` to stop the services.
-
-### Step 4: Configure the Plugin
-
-Edit the `config.json` file and fill in your credentials:
+Edit `/opt/stremula-1/config.json`:
 
 ```json
 {
@@ -98,134 +87,65 @@ Edit the `config.json` file and fill in your credentials:
 }
 ```
 
-**Important Notes:**
-- Replace all placeholder values with your actual credentials
-- `publicBaseUrl`: Leave empty for local use, or set to your Localtunnel URL (see below)
-- `userAgent`: Should match your Reddit username format
+**Note:** Leave `publicBaseUrl` empty - it will be automatically updated by the tunnel service.
 
-### Step 5: Test the Installation
+### Step 3: Start Services
 
 ```bash
-npm start
+# Start main service
+sudo systemctl start stremula
+
+# Start tunnel service
+sudo systemctl start stremula-tunnel
+
+# Enable to start on boot
+sudo systemctl enable stremula
+sudo systemctl enable stremula-tunnel
 ```
 
-You should see output from both services:
-- **SERVER** - Database initialization and server startup
-- **FETCHER** - Initial fetch and background service
+### Step 4: Get Your Tunnel URL
 
-Press `Ctrl + C` to stop both services.
-
-## 🏃‍♂️ Running the Plugin
-
-### Quick Start
+The tunnel service automatically creates a unique URL for your installation:
 
 ```bash
-npm start
+# View tunnel URL from logs
+sudo journalctl -u stremula-tunnel -n 50 | grep "https://"
+
+# Or check config.json
+cat /opt/stremula-1/config.json | grep publicBaseUrl
 ```
 
-This starts both services:
-- **SERVER** - The Stremio server that serves content
-- **FETCHER** - The background service that fetches new posts
-
-### Running Services Individually
-
-**Server only:**
-```bash
-npm run server
-```
-
-**Fetcher only:**
-```bash
-npm run fetcher
-```
-
-### Running in Production
-
-For production deployments, use systemd. See [RASPBERRY_PI_SETUP.md](./RASPBERRY_PI_SETUP.md) for complete setup instructions.
+You'll get a URL like: `https://stremula-1-raspberrypi-abc123.loca.lt`
 
 ## 📡 Installing in Stremio
 
-**⚠️ Important:** Stremio requires HTTPS for network access. HTTP only works for localhost. For all network access (local network and public web), use Localtunnel.
-
-### Option 1: Localhost Access (Same Device Only)
-
-If you're running Stremio on the same device as the server:
-
-```
-http://localhost:7003/manifest.json
-```
-
-**Note:** This only works when Stremio and the server are on the same device.
-
-### Option 2: Network Access via Localtunnel (Recommended)
-
-**Use Localtunnel for all network access** - local network, public web, Stremio Desktop, and Stremio Web. Localtunnel provides HTTPS with valid certificates - no warnings, works everywhere.
-
-**Setup:**
-
-1. **Install Localtunnel:**
-   ```bash
-   npm install -g localtunnel
+1. **Get your tunnel URL** (see Step 4 above)
+2. **Open Stremio** (Desktop or Web)
+3. **Go to Addons** → **Community Addons**
+4. **Click the "+" button**
+5. **Enter your tunnel URL:**
    ```
-
-2. **Start your server:**
-   ```bash
-   npm start
+   https://stremula-1-raspberrypi-abc123.loca.lt/manifest.json
    ```
+   (Replace with your actual tunnel URL)
+6. **Click "Install"**
 
-3. **In a separate terminal, start the tunnel:**
-   ```bash
-   lt --port 7003
-   ```
-
-4. **You'll get a URL like:**
-   ```
-   https://random-name.loca.lt
-   ```
-
-5. **Update config.json** (recommended for media URLs):
-   ```json
-   "server": {
-     "port": 7003,
-     "publicBaseUrl": "https://random-name.loca.lt"
-   }
-   ```
-   Restart the server after updating.
-
-6. **Add to Stremio:**
-   - Open Stremio (Desktop or Web)
-   - Go to **Addons** → **Community Addons**
-   - Click the **"+"** button
-   - Enter: `https://random-name.loca.lt/manifest.json`
-   - Click **"Install"**
-
-**Benefits of Localtunnel:**
-- ✅ **No certificate warnings** - Valid SSL certificates (Let's Encrypt)
-- ✅ **Works everywhere** - Stremio Desktop, Stremio Web, iOS, Android
-- ✅ **No port forwarding** - Works behind any router/NAT
-- ✅ **No firewall config** - No need to open ports
-- ✅ **Free and easy** - No signup required
-- ✅ **Works on local network** - Access from any device on your WiFi
-- ✅ **Works on public web** - Access from anywhere
-
-**Running Localtunnel as a Service:**
-
-For permanent access, run Localtunnel as a systemd service. See [RASPBERRY_PI_SETUP.md](./RASPBERRY_PI_SETUP.md) for complete setup instructions.
-
-**Note:** The tunnel URL changes each time you restart it. For a permanent URL, consider using a paid tunneling service with static URLs.
+**That's it!** The addon is now accessible from anywhere with no certificate warnings.
 
 ## 📥 Backfilling Historical Data
 
 To fill your database with historical F1 weekends:
 
 ```bash
-# Fetch any number of weekends (X can be any number)
+cd /opt/stremula-1
+
+# Fetch any number of weekends
 node cli.js --fetchXp
 
 # Examples:
 node cli.js --fetch1p    # Fetch 1 weekend
-node cli.js --fetch5p    # Fetch 5 weekends
-node cli.js --fetch24p   # Fetch 24 weekends (full season)
+node cli.js --fetch5p     # Fetch 5 weekends
+node cli.js --fetch24p    # Fetch 24 weekends (full season)
 
 # Convenience npm scripts:
 npm run fetch1p
@@ -244,25 +164,9 @@ npm run fetch24p
 - **reddit.username**: Your Reddit username (required)
 - **reddit.password**: Your Reddit password (required)
 - **server.port**: Port for the Stremio server (default: 7003)
-- **server.publicBaseUrl**: 
-  - Leave empty (`""`) for local use (will auto-detect from requests)
-  - Set to your Localtunnel URL (e.g., `"https://random-name.loca.lt"`) for web access
-  - Used to serve media files (posters, thumbnails) to Stremio clients
+- **server.publicBaseUrl**: Automatically updated by tunnel service - leave empty
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
 - **fetcher.maxScrollMonths**: How far back to search for posts (default: 3)
-
-### Environment Variables
-
-You can also use environment variables instead of config.json:
-
-```bash
-export REALDEBRID_API_KEY="your_key"
-export REDDIT_CLIENT_ID="your_id"
-export REDDIT_CLIENT_SECRET="your_secret"
-export REDDIT_USERNAME="your_username"
-export REDDIT_PASSWORD="your_password"
-export PORT=7003
-```
 
 ## 🗄️ Database
 
@@ -291,7 +195,8 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
      - Converts magnet links to Real Debrid streaming links
      - Saves everything to the database
 3. **Server** serves content from the database in real-time
-4. Posts are only marked as "fully processed" when ALL required sessions are found and converted
+4. **Tunnel Service** provides HTTPS access via Localtunnel with a unique subdomain
+5. Posts are only marked as "fully processed" when ALL required sessions are found and converted
 
 ## 🔄 Auto-Restart Functionality
 
@@ -301,7 +206,7 @@ Both the server and fetcher service include built-in auto-restart functionality:
 - **Smart Limiting**: Maximum 5 restarts per 60-second window
 - **Graceful Shutdown**: Cleanly closes connections before restarting
 
-For production deployments, also use systemd for additional protection (see [RASPBERRY_PI_SETUP.md](./RASPBERRY_PI_SETUP.md)).
+Systemd provides additional protection for system-level failures.
 
 ## 🐛 Troubleshooting
 
@@ -319,15 +224,15 @@ For production deployments, also use systemd for additional protection (see [RAS
 - Check server logs for authentication errors
 
 ### Can't access from Stremio
-- **Desktop app**: Make sure you're using `http://` (not `https://`)
-- **Web app**: Use Localtunnel for HTTPS access
-- Check firewall: `sudo ufw allow 7003/tcp`
-- Verify server is running: `curl http://localhost:7003/health`
+- **Get your tunnel URL**: `sudo journalctl -u stremula-tunnel -n 50 | grep "https://"`
+- **Check tunnel is running**: `sudo systemctl status stremula-tunnel`
+- **Test tunnel URL**: `curl https://YOUR_TUNNEL_URL/manifest.json`
 
 ### Server won't start
 - Check that port 7003 is not in use
 - Verify Node.js version is 16 or higher: `node --version`
 - Check that all dependencies are installed: `npm install`
+- Check logs: `sudo journalctl -u stremula -n 50`
 
 ## 📊 Monitoring
 
@@ -343,15 +248,20 @@ curl http://localhost:7003/
 
 ### View Logs
 
-If running with systemd:
 ```bash
-sudo journalctl -u stremula-server -f
-sudo journalctl -u stremula-fetcher -f
+# Main service logs
+sudo journalctl -u stremula -f
+
+# Tunnel service logs
+sudo journalctl -u stremula-tunnel -f
+
+# Press Ctrl + C to exit log view
 ```
 
 ### Check Database
 
 ```bash
+cd /opt/stremula-1
 sqlite3 stremula.db
 ```
 
@@ -364,9 +274,6 @@ SELECT COUNT(*) FROM sessions;
 ## 🔄 Manual Updates
 
 ```bash
-# Navigate to project directory
-cd ~/stremula-1
-# or
 cd /opt/stremula-1
 
 # Pull latest changes
@@ -376,8 +283,8 @@ git pull
 npm install
 
 # Restart services
-sudo systemctl restart stremula-server
-sudo systemctl restart stremula-fetcher
+sudo systemctl restart stremula
+sudo systemctl restart stremula-tunnel
 ```
 
 ## 🔐 Security Notes

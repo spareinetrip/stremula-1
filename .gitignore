@@ -5,5 +5,5 @@ config.json
 .DS_Store
 *.log
 .env
-certs/
+.device-id
 
