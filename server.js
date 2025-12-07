@@ -586,6 +586,47 @@ async function startServer() {
         next();
     });
     
+    // Health check and info endpoint
+    app.get('/', (req, res) => {
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        const ips = [];
+        for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    ips.push(iface.address);
+                }
+            }
+        }
+        
+        res.json({
+            status: 'online',
+            service: 'Stremula 1',
+            version: manifest.version,
+            port: httpPort,
+            database: databaseReady ? 'ready' : 'not ready',
+            localIPs: ips,
+            endpoints: {
+                manifest: '/manifest.json',
+                health: '/',
+                media: '/media'
+            },
+            installUrls: {
+                localhost: `http://localhost:${httpPort}/manifest.json`,
+                localNetwork: ips.map(ip => `http://${ip}:${httpPort}/manifest.json`)
+            }
+        });
+    });
+    
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+        res.json({
+            status: 'ok',
+            database: databaseReady,
+            timestamp: new Date().toISOString()
+        });
+    });
+    
     // Serve static files (media folder)
     app.use('/media', express.static(path.join(__dirname, 'media')));
     
@@ -619,7 +660,9 @@ async function startServer() {
     try {
         // Listen on all interfaces (0.0.0.0) for local network access
         httpServerInstance.listen(httpPort, '0.0.0.0', () => {
+            const address = httpServerInstance.address();
             console.log(`\n🌐 HTTP server running on port ${httpPort} (all interfaces)`);
+            console.log(`   Listening on: ${address.address}:${address.port}`);
             
             // Get local IP addresses for display
             const os = require('os');
@@ -633,7 +676,7 @@ async function startServer() {
                 }
             }
             
-            console.log(`📡 Install in Stremio (localhost):`);
+            console.log(`\n📡 Install in Stremio (localhost):`);
             console.log(`   http://localhost:${httpPort}/manifest.json`);
             console.log(`   http://127.0.0.1:${httpPort}/manifest.json`);
             
@@ -642,12 +685,29 @@ async function startServer() {
                 ips.forEach(ip => {
                     console.log(`   http://${ip}:${httpPort}/manifest.json`);
                 });
+                console.log(`\n🔍 Test server access:`);
+                ips.forEach(ip => {
+                    console.log(`   http://${ip}:${httpPort}/`);
+                });
             } else {
                 console.log(`\n📡 Install in Stremio (local network):`);
                 console.log(`   http://YOUR_IP:${httpPort}/manifest.json`);
                 console.log(`   (Replace YOUR_IP with your device's IP address)`);
             }
             console.log(`\n✅ Using HTTP for local network access (no certificate issues)`);
+            console.log(`\n⚠️  If you can't access from other devices:`);
+            console.log(`   1. Make sure you include the port: http://IP:${httpPort}`);
+            console.log(`   2. Check firewall: sudo ufw allow ${httpPort}/tcp`);
+            console.log(`   3. Verify server is running: curl http://localhost:${httpPort}/health`);
+            console.log(`   4. Check if server is listening: netstat -tuln | grep ${httpPort}`);
+        });
+        
+        // Verify server is actually listening
+        httpServerInstance.on('listening', () => {
+            const address = httpServerInstance.address();
+            if (address) {
+                console.log(`✅ Server confirmed listening on ${address.address}:${address.port}`);
+            }
         });
     } catch (error) {
         console.error('❌ Failed to start HTTP server:', error);
