@@ -1,13 +1,10 @@
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const express = require('express');
-const https = require('https');
 const http = require('http');
 const path = require('path');
-const fs = require('fs');
 const { spawn } = require('child_process');
 const { getConfig } = require('./config');
 const db = require('./database');
-const { getCertificates, getCACertificatePath } = require('./cert-mkcert-utils');
 
 // Initialize database
 let databaseReady = false;
@@ -26,7 +23,6 @@ const RESTART_CONFIG = {
 let restartAttempts = [];
 let isRestarting = false;
 let httpServerInstance = null;
-let httpsServerInstance = null;
 let errorHandlersSetup = false;
 
 // Helper function to convert slug to GP name
@@ -477,51 +473,24 @@ function handleCriticalError(type, error) {
 // Gracefully shutdown servers
 function shutdownServers(callback) {
     isRestarting = true;
-    let shutdownCount = 0;
-    const totalServers = (httpServerInstance ? 1 : 0) + (httpsServerInstance ? 1 : 0);
 
-    if (totalServers === 0) {
+    if (!httpServerInstance) {
         // Give a small delay to ensure any pending operations complete
         setTimeout(callback, 500);
         return;
     }
 
-    const checkShutdown = () => {
-        shutdownCount++;
-        if (shutdownCount >= totalServers) {
-            // Additional delay to ensure port is fully released
-            console.log('⏳ Waiting for port to be released...');
-            setTimeout(callback, 1000);
-        }
-    };
-
-    if (httpServerInstance) {
-        // Stop accepting new connections
-        httpServerInstance.close(() => {
-            console.log('✅ HTTP server closed');
-            httpServerInstance = null;
-            checkShutdown();
-        });
-        
-        // Also close all existing connections
-        httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
-    } else {
-        checkShutdown();
-    }
-
-    if (httpsServerInstance) {
-        // Stop accepting new connections
-        httpsServerInstance.close(() => {
-            console.log('✅ HTTPS server closed');
-            httpsServerInstance = null;
-            checkShutdown();
-        });
-        
-        // Also close all existing connections
-        httpsServerInstance.closeAllConnections && httpsServerInstance.closeAllConnections();
-    } else {
-        checkShutdown();
-    }
+    // Stop accepting new connections
+    httpServerInstance.close(() => {
+        console.log('✅ HTTP server closed');
+        httpServerInstance = null;
+        // Additional delay to ensure port is fully released
+        console.log('⏳ Waiting for port to be released...');
+        setTimeout(callback, 1000);
+    });
+    
+    // Also close all existing connections
+    httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
 
     // Force close after timeout
     setTimeout(() => {
@@ -529,11 +498,6 @@ function shutdownServers(callback) {
             httpServerInstance.close();
             httpServerInstance.closeAllConnections && httpServerInstance.closeAllConnections();
             httpServerInstance = null;
-        }
-        if (httpsServerInstance) {
-            httpsServerInstance.close();
-            httpsServerInstance.closeAllConnections && httpsServerInstance.closeAllConnections();
-            httpsServerInstance = null;
         }
         callback();
     }, 10000);
@@ -604,7 +568,6 @@ async function startServer() {
     }
     
     const httpPort = config.server.port || 7003;
-    const httpsPort = httpPort + 1; // HTTPS on next port
     const app = express();
     
     // Dynamic base URL detection from requests
@@ -612,10 +575,9 @@ async function startServer() {
         try {
             const host = req.headers.host;
             if (host) {
-                // Determine protocol based on host
-                // localhost uses HTTP, IP addresses use HTTPS
-                const isLocal = isLocalhost(host);
-                const proto = isLocal ? 'http' : (req.headers['x-forwarded-proto'] || '').toString().split(',')[0] || 'https';
+                // Always use HTTP for local network access (no certificate issues)
+                // This works for both localhost and IP addresses
+                const proto = 'http';
                 // Update dynamic base URL based on the request
                 // This ensures images use the correct host and protocol
                 dynamicBaseUrl = `${proto}://${host}`;
@@ -627,37 +589,11 @@ async function startServer() {
     // Serve static files (media folder)
     app.use('/media', express.static(path.join(__dirname, 'media')));
     
-    // Serve CA certificate for installation
-    app.get('/ca.crt', (req, res) => {
-        try {
-            const caPath = getCACertificatePath();
-            if (fs.existsSync(caPath)) {
-                res.setHeader('Content-Type', 'application/x-x509-ca-cert');
-                res.setHeader('Content-Disposition', 'attachment; filename="stremula-ca.crt"');
-                res.sendFile(caPath);
-            } else {
-                res.status(404).json({ error: 'CA certificate not found' });
-            }
-        } catch (error) {
-            res.status(500).json({ error: 'Failed to serve CA certificate' });
-        }
-    });
-    
     // Mount Stremio addon router
     const router = getRouter({ manifest, get: builder.getInterface().get });
     app.use('/', router);
     
-    // Get SSL certificates for HTTPS (required for IP access)
-    let sslOptions;
-    try {
-        sslOptions = await getCertificates();
-    } catch (error) {
-        console.error('⚠️  Failed to load SSL certificates:', error.message);
-        console.error('   HTTPS will not be available. Only localhost HTTP will work.');
-        sslOptions = null;
-    }
-    
-    // Start HTTP server for localhost (Stremio allows HTTP for 127.0.0.1)
+    // Start HTTP server on all interfaces for local network access (no certificate issues)
     httpServerInstance = http.createServer(app);
     
     // Add error handler to prevent crashes from propagating
@@ -681,111 +617,42 @@ async function startServer() {
     });
 
     try {
-        httpServerInstance.listen(httpPort, '127.0.0.1', () => {
-            console.log(`\n🌐 HTTP server running on port ${httpPort} (localhost only)`);
-            console.log(`📡 Install in Stremio (localhost): http://localhost:${httpPort}/manifest.json`);
-            console.log(`📡 Install in Stremio (localhost): http://127.0.0.1:${httpPort}/manifest.json`);
+        // Listen on all interfaces (0.0.0.0) for local network access
+        httpServerInstance.listen(httpPort, '0.0.0.0', () => {
+            console.log(`\n🌐 HTTP server running on port ${httpPort} (all interfaces)`);
+            
+            // Get local IP addresses for display
+            const os = require('os');
+            const interfaces = os.networkInterfaces();
+            const ips = [];
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name]) {
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        ips.push(iface.address);
+                    }
+                }
+            }
+            
+            console.log(`📡 Install in Stremio (localhost):`);
+            console.log(`   http://localhost:${httpPort}/manifest.json`);
+            console.log(`   http://127.0.0.1:${httpPort}/manifest.json`);
+            
+            if (ips.length > 0) {
+                console.log(`\n📡 Install in Stremio (local network - iOS compatible):`);
+                ips.forEach(ip => {
+                    console.log(`   http://${ip}:${httpPort}/manifest.json`);
+                });
+            } else {
+                console.log(`\n📡 Install in Stremio (local network):`);
+                console.log(`   http://YOUR_IP:${httpPort}/manifest.json`);
+                console.log(`   (Replace YOUR_IP with your device's IP address)`);
+            }
+            console.log(`\n✅ Using HTTP for local network access (no certificate issues)`);
         });
     } catch (error) {
         console.error('❌ Failed to start HTTP server:', error);
         handleCriticalError('httpServerStart', error);
         return;
-    }
-    
-    // Start HTTPS server for IP access on different port (if certificates available)
-    if (sslOptions) {
-        httpsServerInstance = https.createServer(sslOptions, app);
-        
-        // Handle HTTPS server errors
-        httpsServerInstance.on('error', (error) => {
-            if (error.code === 'EADDRINUSE') {
-                console.error(`\n❌ Port ${httpsPort} is already in use.`);
-                console.error(`   Please stop the other process or use a different port.`);
-                console.error(`   To find and kill the process: kill -9 $(lsof -ti:${httpsPort})`);
-                // Don't restart for port conflicts
-            } else {
-                console.error('❌ HTTPS server error:', error);
-                // Don't restart for HTTPS errors if HTTP is still running
-                console.error('⚠️  HTTP server continues running for localhost access');
-            }
-        });
-
-        // Handle client errors gracefully
-        // Track error frequency to avoid spam
-        const clientErrorCounts = new Map();
-        const ERROR_LOG_INTERVAL = 60000; // 1 minute
-        
-        httpsServerInstance.on('clientError', (err, socket) => {
-            const errorMsg = err.message || '';
-            
-            // Filter out expected SSL certificate errors (self-signed cert rejections)
-            // These are normal when clients don't trust the self-signed certificate
-            if (errorMsg.includes('certificate unknown') || 
-                errorMsg.includes('sslv3 alert certificate unknown') ||
-                errorMsg.includes('SSL alert number 46')) {
-                // Suppress these expected errors - they're normal for self-signed certs
-                socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-                return;
-            }
-            
-            // For other errors, rate limit logging to avoid spam
-            const errorKey = errorMsg.substring(0, 100); // Use first 100 chars as key
-            const now = Date.now();
-            const errorInfo = clientErrorCounts.get(errorKey);
-            
-            if (!errorInfo || (now - errorInfo.lastLogged) > ERROR_LOG_INTERVAL) {
-                const count = errorInfo ? errorInfo.count + 1 : 1;
-                clientErrorCounts.set(errorKey, { count, lastLogged: now });
-                
-                if (count === 1) {
-                    console.error('⚠️  HTTPS client error:', errorMsg);
-                } else {
-                    console.error(`⚠️  HTTPS client error (${count} times in last minute):`, errorMsg);
-                }
-            } else {
-                errorInfo.count++;
-            }
-            
-            socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-        });
-
-        try {
-            httpsServerInstance.listen(httpsPort, '0.0.0.0', () => {
-                console.log(`\n🔒 HTTPS server running on port ${httpsPort} (for IP access)`);
-                
-                // Get local IP addresses for display
-                const os = require('os');
-                const interfaces = os.networkInterfaces();
-                const ips = [];
-                for (const name of Object.keys(interfaces)) {
-                    for (const iface of interfaces[name]) {
-                        if (iface.family === 'IPv4' && !iface.internal) {
-                            ips.push(iface.address);
-                        }
-                    }
-                }
-                
-                if (ips.length > 0) {
-                    console.log(`📡 Install in Stremio (via IP):`);
-                    ips.forEach(ip => {
-                        console.log(`   https://${ip}:${httpsPort}/manifest.json`);
-                    });
-                } else {
-                    console.log(`📡 Install in Stremio: https://YOUR_IP:${httpsPort}/manifest.json`);
-                    console.log(`   (Replace YOUR_IP with your device's IP address)`);
-                }
-                console.log(`\n🔐 mkcert CA Certificate:`);
-                console.log(`   Download: https://YOUR_IP:${httpsPort}/ca.crt`);
-                console.log(`   Install this CA certificate on other devices to trust the server certificate`);
-                console.log(`   📱 macOS: Double-click ca.crt → Keychain Access → Trust → Always Trust`);
-                console.log(`   📱 iOS: Settings → General → About → Certificate Trust Settings`);
-                console.log(`   📱 See MKCERT_SETUP.md for detailed instructions`);
-                console.log(`\n✅ Certificates are automatically trusted on this machine (mkcert installed)`);
-            });
-        } catch (error) {
-            console.error('❌ Failed to start HTTPS server:', error);
-            console.error('⚠️  HTTP server continues running for localhost access');
-        }
     }
     
     console.log(`📊 Database ready: ${databaseReady}`);
