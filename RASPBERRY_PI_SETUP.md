@@ -1,6 +1,6 @@
 # Raspberry Pi Setup Guide for Stremula 1
 
-This guide will walk you through setting up your Raspberry Pi and installing Stremula 1 from scratch.
+Complete setup guide for running Stremula 1 on Raspberry Pi with automatic startup and easy access via Stremio.
 
 ## 📋 Prerequisites
 
@@ -8,7 +8,7 @@ This guide will walk you through setting up your Raspberry Pi and installing Str
 - MicroSD card (8GB minimum, 16GB+ recommended)
 - Power supply for your Raspberry Pi
 - Network connection (Ethernet or WiFi)
-- A computer (Mac, Windows, or Linux) to connect from
+- A computer to connect from
 
 ---
 
@@ -43,7 +43,6 @@ This guide will walk you through setting up your Raspberry Pi and installing Str
 
    **Method B: Using network scanner (from your Mac)**
    ```bash
-   # Scan your local network
    arp -a | grep -i "b8:27:eb\|dc:a6:32\|e4:5f:01"
    ```
 
@@ -55,9 +54,9 @@ This guide will walk you through setting up your Raspberry Pi and installing Str
 
 ## Part 2: Connecting to Your Raspberry Pi
 
-### On macOS (your current computer):
+### On macOS:
 
-Open Terminal (Applications → Utilities → Terminal) and use SSH:
+Open Terminal and use SSH:
 
 ```bash
 # Replace 192.168.1.100 with your Pi's actual IP address
@@ -80,8 +79,6 @@ pi@raspberrypi:~ $
 
 ### Step 1: Update the System
 
-Once connected via SSH, run:
-
 ```bash
 # Update package lists
 sudo apt update
@@ -95,7 +92,7 @@ sudo apt install -y git curl wget
 
 ### Step 2: Install Node.js
 
-Stremula 1 requires Node.js version 16 or higher. Install it:
+Stremula 1 requires Node.js version 16 or higher:
 
 ```bash
 # Install Node.js 20.x (LTS version)
@@ -111,13 +108,11 @@ You should see versions like `v20.x.x` and `10.x.x`.
 
 ---
 
-## Part 4: Downloading the Project from GitHub
+## Part 4: Downloading the Project
 
 ### Choosing Installation Location
 
-You have two options for where to install:
-
-**Option A: Home Directory (`~/stremula-1`)** - **Simpler, good for single service**
+**Option A: Home Directory (`~/stremula-1`)** - **Simpler**
 - ✅ No permission issues
 - ✅ Easy to manage
 - ❌ Can clutter home directory if you run many services
@@ -125,7 +120,7 @@ You have two options for where to install:
 **Option B: `/opt/stremula-1`** - **Recommended for multiple services**
 - ✅ Standard Linux location for optional software
 - ✅ Keeps home directory clean
-- ✅ Better organization when running multiple services
+- ✅ Better organization
 - ⚠️ Requires `sudo` for installation
 
 **Recommendation:** If you plan to run multiple services, use `/opt`. Otherwise, home directory is fine.
@@ -133,8 +128,6 @@ You have two options for where to install:
 ### Using Git (Recommended)
 
 **Option A: Install in Home Directory**
-
-On your Raspberry Pi (via SSH):
 
 ```bash
 # Navigate to home directory
@@ -147,9 +140,7 @@ git clone https://github.com/YOUR_USERNAME/stremula-1.git
 cd stremula-1
 ```
 
-**Option B: Install in /opt (Recommended for Multiple Services)**
-
-On your Raspberry Pi (via SSH):
+**Option B: Install in /opt**
 
 ```bash
 # Clone to /opt (requires sudo)
@@ -164,96 +155,13 @@ cd /opt/stremula-1
 
 **Note:** Replace `https://github.com/YOUR_USERNAME/stremula-1.git` with your actual GitHub repository URL.
 
-**✅ Git remote automatically configured:** Using `git clone` automatically sets up the git remote.
-
 **⚠️ Important:** If you install in `/opt`, remember to update the `WorkingDirectory` path in the systemd service files (Part 6) from `/home/pi/stremula-1` to `/opt/stremula-1`.
-
-### Alternative: Using SCP (if you prefer manual transfer)
-
-If you haven't pushed your project to GitHub yet, you can copy it manually:
-
-From your **Mac Terminal** (not connected to Pi), navigate to your project directory and copy files:
-
-**To home directory:**
-```bash
-# Make sure you're in the directory containing 'stremula-1'
-cd "/Users/julien/Stremula 1"
-
-# Copy the entire stremula-1 folder to your Pi's home directory
-# Replace 192.168.1.100 with your Pi's IP
-# Replace 'pi' with your username if different
-scp -r stremula-1 pi@192.168.1.100:~/
-```
-
-**To /opt directory:**
-```bash
-# Make sure you're in the directory containing 'stremula-1'
-cd "/Users/julien/Stremula 1"
-
-# Copy to /tmp first (no sudo needed)
-scp -r stremula-1 pi@192.168.1.100:/tmp/
-
-# Then on the Pi, move it to /opt and fix ownership
-# SSH into your Pi and run:
-# sudo mv /tmp/stremula-1 /opt/
-# sudo chown -R $USER:$USER /opt/stremula-1
-```
-
-**Important Note:** If you use SCP or download the project as a ZIP file (instead of `git clone`), the git remote will NOT be automatically configured. To set it up:
-
-**If in home directory:**
-```bash
-# On your Raspberry Pi, navigate to the project
-cd ~/stremula-1
-
-# Initialize git repository (if not already a git repo)
-git init
-
-# Add the remote (replace with your actual GitHub repo URL)
-git remote add origin https://github.com/YOUR_USERNAME/stremula-1.git
-
-# Verify it was added
-git remote -v
-```
-
-**If in /opt:**
-```bash
-# On your Raspberry Pi, navigate to the project
-cd /opt/stremula-1
-
-# Initialize git repository (if not already a git repo)
-git init
-
-# Add the remote (replace with your actual GitHub repo URL)
-git remote add origin https://github.com/YOUR_USERNAME/stremula-1.git
-
-# Verify it was added
-git remote -v
-```
-
-**Recommendation:** Using `git clone` (the first method) is recommended because it automatically sets up the remote.
-
-**Enter your password when prompted.**
-
-### Alternative: Using SFTP Client (GUI method)
-
-1. Download **FileZilla** or **Cyberduck** (free SFTP clients)
-2. Connect to your Pi:
-   - Host: `sftp://192.168.1.100` (your Pi's IP)
-   - Username: `pi`
-   - Password: your Pi password
-   - Port: `22`
-3. Drag and drop the `stremula-1` folder to your Pi's home directory
 
 ---
 
 ## Part 5: Installing and Configuring Stremula 1
 
 ### Step 1: Navigate to Project Directory
-
-If you used Git clone, you should already be in the project directory. If not, navigate to it:
-
-On your Raspberry Pi (via SSH):
 
 **If installed in home directory:**
 ```bash
@@ -275,7 +183,7 @@ This will take a few minutes. Wait for it to complete.
 
 ### Step 3: Generate Configuration File
 
-The `config.json` file is automatically created on first run. Let's generate it now:
+The `config.json` file is automatically created on first run:
 
 ```bash
 # Run the server briefly to generate config.json
@@ -283,9 +191,7 @@ The `config.json` file is automatically created on first run. Let's generate it 
 npm start
 ```
 
-Wait a few seconds, then press `Ctrl + C` to stop the services. The `config.json` file will now exist in the project directory.
-
-**Note:** If you prefer to create the config file manually, you can skip this step and create it yourself, but the auto-generation is easier.
+Wait a few seconds, then press `Ctrl + C` to stop the services.
 
 ### Step 4: Configure the Addon
 
@@ -304,7 +210,7 @@ nano config.json
   - `password`: Your Reddit password
   - `userAgent`: Should match your Reddit username (e.g., `"Stremula1/3.0 (by u/yourusername)"`)
 - Set `realdebrid.enabled` to `true`
-- Set `publicBaseUrl` to your IP address (`"https://YOUR_IP:7004"` for network access)
+- Leave `publicBaseUrl` empty for now (or set to Localtunnel URL if using it)
 
 **To save in nano:**
 - Press `Ctrl + X`
@@ -313,26 +219,13 @@ nano config.json
 
 ### Step 5: Test the Installation
 
-Run both services to make sure everything works:
-
 ```bash
 npm start
 ```
 
 You should see output from both services:
-- **SERVER** (blue output) - Database initialization and server startup messages
-- **FETCHER** (green output) - Fetcher service startup and initial fetch
-
-Example output:
-```
-[SERVER] ✅ Database initialized
-[SERVER] 🌐 HTTP server running on port 7003 (localhost only)
-[SERVER] 🔒 HTTPS server running on port 7004 (for IP access)
-[FETCHER] ✅ Database initialized for fetcher service
-[FETCHER] 🚀 Running initial fetch...
-```
-
-**Note:** If you see configuration errors (like "Real Debrid not configured" or "Reddit API not configured"), that's normal if you haven't filled in your credentials yet. Make sure you've completed Step 4 above.
+- **SERVER** - Database initialization and server startup messages
+- **FETCHER** - Fetcher service startup and initial fetch
 
 **Press `Ctrl + C` to stop both services** (we'll set them up to run automatically next).
 
@@ -471,7 +364,7 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
-Save and exit (`Ctrl + X`, `Y`, `Enter`).
+Save and exit.
 
 Create the fetcher service:
 
@@ -593,118 +486,83 @@ node cli.js --fetch1p    # Fetch 1 weekend
 node cli.js --fetch5p    # Fetch 5 weekends
 node cli.js --fetch24p   # Fetch all 24 weekends (full season)
 
-# Or use convenience npm scripts for common numbers:
+# Or use convenience npm scripts:
 npm run fetch1p
 npm run fetch5p
 npm run fetch24p
 ```
 
-**Note:** Replace `X` with any number (e.g., `--fetch17p` for 17 weekends). This will take some time as it processes all the weekends.
-
 ---
 
 ## Part 8: Installing in Stremio
 
-### Option A: Localhost Access (Same Device)
+### Option A: Stremio Desktop App (Recommended - Easiest)
 
-If you're running Stremio on the same Raspberry Pi:
+**For localhost access (if running Stremio on the Pi):**
+1. Open Stremio on your Pi
+2. Go to **Addons** → **Community Addons**
+3. Click the **"+"** button
+4. Enter: `http://localhost:7003/manifest.json`
+5. Click **"Install"**
 
-1. **Open Stremio** on your Pi
-2. **Go to Addons** → **Community Addons**
-3. **Click the "+" button**
-4. **Enter your addon URL:**
-   ```
-   http://localhost:7003/manifest.json
-   ```
-5. **Click "Install"**
-
-### Option B: Network Access (Other Devices on Same Network)
-
-To access from your phone, computer, or TV on the same WiFi network:
-
+**For network access (from another device on same WiFi):**
 1. **Find your Pi's IP address:**
    ```bash
    hostname -I
    ```
    Example output: `192.168.1.100`
 
-2. **Update config.json** (optional but recommended):
-   ```bash
-   # If in home directory:
-   nano ~/stremula-1/config.json
-   
-   # If in /opt:
-   nano /opt/stremula-1/config.json
+2. **Open Stremio Desktop** on your device (phone, computer, TV, etc.)
+3. **Go to Addons** → **Community Addons**
+4. **Click the "+" button**
+5. **Enter your addon URL:**
    ```
-   Set `publicBaseUrl` to your Pi's IP:
-   ```json
-   "server": {
-     "port": 7003,
-     "publicBaseUrl": "https://192.168.1.100:7004"
-   }
-   ```
-   Save and exit (`Ctrl + X`, `Y`, `Enter`)
-
-3. **Restart the service** (if it's running):
-   ```bash
-   # If using separate services:
-   sudo systemctl restart stremula-server
-   
-   # If using single service:
-   sudo systemctl restart stremula
-   ```
-
-4. **Open Stremio** on your device (phone, computer, TV, etc.)
-5. **Go to Addons** → **Community Addons**
-6. **Click the "+" button**
-7. **Enter your addon URL:**
-   ```
-   https://192.168.1.100:7004/manifest.json
+   http://192.168.1.100:7003/manifest.json
    ```
    (Replace `192.168.1.100` with your Pi's actual IP address)
 
-8. **Handle the security warning:**
-   - Your browser/device may show a "Website is not secure" warning
-   - This is normal for self-signed certificates
-   - Click "Advanced" → "Proceed" or "Accept the Risk"
-   - This is safe for local network use
-
-9. **Click "Install"**
+6. **Click "Install"**
 
 The addon should now appear in your Stremio library!
 
-### Option C: Internet Access (Different Network)
+### Option B: Stremio Web (via Localtunnel)
 
-To access your Pi's addon from outside your local network (e.g., from work, mobile data, or another location):
+Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access with no certificate warnings.
 
-**⚠️ Security Note:** Exposing your server to the internet has security implications. Only do this if you understand the risks and trust your network setup. See the security section below.
+**🔒 Benefits:**
+- ✅ **No certificate warnings** - Valid SSL certificates provided by Localtunnel
+- ✅ **Works with Stremio web** - No browser security blocks
+- ✅ **Works on all devices** - iOS, Android, web browsers
+- ✅ **No port forwarding needed** - Works behind any router/NAT
+- ✅ **Free and easy** - No signup required
 
-1. **Find your public IP address:**
+**Setup Steps:**
+
+1. **Install Localtunnel:**
    ```bash
-   curl ifconfig.me
-   ```
-   Example: `203.0.113.42`
-
-2. **Configure Router Port Forwarding:**
-   - Log into your router's admin panel (usually `192.168.1.1` or `192.168.0.1`)
-   - Navigate to "Port Forwarding" or "Virtual Server" settings
-   - Add a new rule:
-     - **External Port**: `7004`
-     - **Internal IP**: Your Pi's local IP (e.g., `192.168.1.100`)
-     - **Internal Port**: `7004`
-     - **Protocol**: `TCP`
-   - Save the configuration
-
-3. **Configure Firewall on Pi:**
-   ```bash
-   # Allow port 7004 through firewall
-   sudo ufw allow 7004/tcp
-   
-   # Verify firewall status
-   sudo ufw status
+   sudo npm install -g localtunnel
    ```
 
-4. **Update config.json:**
+2. **Start your Stremula server** (if not already running):
+   ```bash
+   # If using systemd, it should already be running
+   # If not, start it:
+   sudo systemctl start stremula-server
+   # or if using single service:
+   sudo systemctl start stremula
+   ```
+
+3. **Start the tunnel** in a separate terminal (or as a systemd service):
+   ```bash
+   lt --port 7003
+   ```
+
+4. **You'll see output like:**
+   ```
+   your url is: https://random-name.loca.lt
+   ```
+
+5. **Update config.json** (optional but recommended for media URLs):
    ```bash
    # If in home directory:
    nano ~/stremula-1/config.json
@@ -712,47 +570,59 @@ To access your Pi's addon from outside your local network (e.g., from work, mobi
    # If in /opt:
    nano /opt/stremula-1/config.json
    ```
-   Set `publicBaseUrl` to your public IP:
+   Set `publicBaseUrl` to your tunnel URL:
    ```json
    "server": {
      "port": 7003,
-     "publicBaseUrl": "https://203.0.113.42:7004"
+     "publicBaseUrl": "https://random-name.loca.lt"
    }
    ```
-   (Replace with your actual public IP)
+   Save and restart the server if needed.
 
-5. **Restart the service:**
-   ```bash
-   # If using separate services:
-   sudo systemctl restart stremula-server
-   
-   # If using single service:
-   sudo systemctl restart stremula
-   ```
+6. **Add to Stremio Web:**
+   - Go to [web.stremio.com](https://web.stremio.com)
+   - Go to **Addons** → **Community Addons**
+   - Click the **"+"** button
+   - Enter: `https://random-name.loca.lt/manifest.json`
+   - Click **"Install"**
 
-6. **Open Stremio** on your remote device
-7. **Go to Addons** → **Community Addons**
-8. **Click the "+" button**
-9. **Enter your addon URL:**
-   ```
-   https://203.0.113.42:7004/manifest.json
-   ```
-   (Replace with your actual public IP)
+**Running Localtunnel as a Systemd Service (Optional):**
 
-10. **Handle the security warning** (same as Option B)
+For permanent access, you can run Localtunnel as a systemd service:
 
-**Note about Dynamic IPs:**
-- Most home internet connections have dynamic IPs that change periodically
-- If your IP changes, you'll need to update the `publicBaseUrl` in config.json
-- Consider using a Dynamic DNS service (e.g., DuckDNS, No-IP) for a stable hostname
+```bash
+sudo nano /etc/systemd/system/stremula-tunnel.service
+```
 
-### 🔒 Self-Signed Certificate Warnings
+Paste:
+```ini
+[Unit]
+Description=Stremula 1 Localtunnel
+After=network.target stremula-server.service
+Requires=stremula-server.service
 
-**Security Warning:**
-- The HTTPS server uses a self-signed certificate for convenience
-- Browsers will show security warnings - this is **normal and expected**
-- For local network use, this is perfectly safe
-- For production/public servers, consider using Let's Encrypt or a proper SSL certificate
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/usr/bin/lt --port 7003
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Note:** Adjust paths and username as needed. The tunnel URL will still change on restart, but it will automatically restart with the server.
+
+Then:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable stremula-tunnel
+sudo systemctl start stremula-tunnel
+```
+
+**Note:** The tunnel URL changes each time you restart it. For a permanent URL, consider using a paid tunneling service or setting up your own domain with HTTPS.
 
 ---
 
@@ -846,6 +716,9 @@ hostname -I
 ```bash
 # From your Mac or any device on the network
 curl http://YOUR_PI_IP:7003/manifest.json
+
+# Health check
+curl http://YOUR_PI_IP:7003/health
 ```
 
 ---
@@ -879,7 +752,6 @@ curl http://YOUR_PI_IP:7003/manifest.json
 2. **Check file paths:**
    - Make sure the `WorkingDirectory` in service files matches where you installed the project
    - Verify Node.js path: `which node` (should be `/usr/bin/node`)
-   - Verify npm path: `which npm` (should be `/usr/bin/npm` for single service option)
 
 3. **Check permissions:**
    ```bash
@@ -897,7 +769,7 @@ curl http://YOUR_PI_IP:7003/manifest.json
 1. **Check firewall:**
    ```bash
    # Allow port 7003
-   sudo ufw allow 7003
+   sudo ufw allow 7003/tcp
    ```
 
 2. **Verify server is running:**
@@ -906,7 +778,32 @@ curl http://YOUR_PI_IP:7003/manifest.json
    ```
 
 3. **Check publicBaseUrl in config.json:**
-   - Should be set to your Pi's IP: `"http://192.168.1.100:7003"`
+   - For local network: Leave empty or set to `http://YOUR_IP:7003`
+   - For Localtunnel: Set to your tunnel URL
+
+### Localtunnel not working
+
+1. **Make sure server is running:**
+   ```bash
+   sudo systemctl status stremula-server
+   ```
+
+2. **Check if port 7003 is accessible:**
+   ```bash
+   curl http://localhost:7003/health
+   ```
+
+3. **Try restarting the tunnel:**
+   ```bash
+   # Stop tunnel
+   sudo systemctl stop stremula-tunnel
+   
+   # Start tunnel
+   sudo systemctl start stremula-tunnel
+   
+   # Check logs
+   sudo journalctl -u stremula-tunnel -f
+   ```
 
 ---
 
@@ -918,4 +815,3 @@ curl http://YOUR_PI_IP:7003/manifest.json
 - You can safely disconnect from SSH - the services will keep running
 
 **Enjoy your F1 replays! 🏎️**
-
