@@ -585,38 +585,17 @@ async function startServer() {
         next();
     });
     
-    // Health check and info endpoint
-    app.get('/', (req, res) => {
-        const os = require('os');
-        const interfaces = os.networkInterfaces();
-        const ips = [];
-        for (const name of Object.keys(interfaces)) {
-            for (const iface of interfaces[name]) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                    ips.push(iface.address);
-                }
-            }
-        }
-        
-        res.json({
-            status: 'online',
-            service: 'Stremula 1',
-            version: manifest.version,
-            port: httpPort,
-            database: databaseReady ? 'ready' : 'not ready',
-            endpoints: {
-                manifest: '/manifest.json',
-                health: '/',
-                media: '/media'
-            },
-            installUrls: {
-                localhost: `http://localhost:${httpPort}/manifest.json`,
-                note: 'For network access, use the Localtunnel URL. Check config.json or tunnel service logs for your unique URL.'
-            }
-        });
-    });
+    // Serve static files (media folder) - mount before router
+    app.use('/media', express.static(path.join(__dirname, 'media')));
     
-    // Health check endpoint
+    // Mount Stremio addon router FIRST
+    // The router handles /manifest.json and all resource endpoints
+    // Pass the full addonInterface object (not destructured)
+    const addonInterface = builder.getInterface();
+    const router = getRouter(addonInterface);
+    app.use(router);
+    
+    // Health check endpoint (after router, so it doesn't interfere)
     app.get('/health', (req, res) => {
         res.json({
             status: 'ok',
@@ -625,12 +604,26 @@ async function startServer() {
         });
     });
     
-    // Serve static files (media folder)
-    app.use('/media', express.static(path.join(__dirname, 'media')));
-    
-    // Mount Stremio addon router
-    const router = getRouter({ manifest, get: builder.getInterface().get });
-    app.use('/', router);
+    // Info endpoint (after router, so it doesn't interfere with Stremio routes)
+    app.get('/', (req, res) => {
+        res.json({
+            status: 'online',
+            service: 'Stremula 1',
+            version: manifest.version,
+            port: httpPort,
+            database: databaseReady ? 'ready' : 'not ready',
+            endpoints: {
+                manifest: '/manifest.json',
+                health: '/health',
+                media: '/media'
+            },
+            installUrls: {
+                localhost: `http://localhost:${httpPort}/manifest.json`,
+                tunnel: getPublicBaseUrl() ? `${getPublicBaseUrl()}/manifest.json` : 'Not configured',
+                note: 'For network access, use the Localtunnel URL. Check config.json or tunnel service logs for your unique URL.'
+            }
+        });
+    });
     
     // Start HTTP server on all interfaces for local network access
     httpServerInstance = http.createServer(app);

@@ -365,17 +365,20 @@ npm run fetch24p
 ### Managing Services
 
 ```bash
-# Start services
+# Start services (order matters: server first, then tunnel)
 sudo systemctl start stremula
 sudo systemctl start stremula-tunnel
 
-# Stop services
-sudo systemctl stop stremula
+# Stop services (order doesn't matter for stopping)
 sudo systemctl stop stremula-tunnel
+sudo systemctl stop stremula
 
-# Restart services
+# Restart services (IMPORTANT: restart server first, then tunnel)
 sudo systemctl restart stremula
 sudo systemctl restart stremula-tunnel
+
+# Or restart both together (systemd will handle order automatically)
+sudo systemctl restart stremula stremula-tunnel
 
 # Check status
 sudo systemctl status stremula
@@ -385,6 +388,8 @@ sudo systemctl status stremula-tunnel
 sudo journalctl -u stremula -f
 sudo journalctl -u stremula-tunnel -f
 ```
+
+**⚠️ Important:** When manually restarting services, always restart `stremula` first, then `stremula-tunnel`. The tunnel service needs the server to be running on port 7003 before it can connect. On system boot, systemd handles this automatically due to the `After` and `Requires` dependencies.
 
 ### Updating Your Project
 
@@ -397,7 +402,7 @@ git pull
 # Reinstall dependencies (if package.json changed)
 npm install
 
-# Restart services
+# Restart services (IMPORTANT: restart server first, then tunnel)
 sudo systemctl restart stremula
 sudo systemctl restart stremula-tunnel
 ```

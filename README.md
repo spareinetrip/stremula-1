@@ -227,6 +227,7 @@ Systemd provides additional protection for system-level failures.
 - **Get your tunnel URL**: `sudo journalctl -u stremula-tunnel -n 50 | grep "https://"`
 - **Check tunnel is running**: `sudo systemctl status stremula-tunnel`
 - **Test tunnel URL**: `curl https://YOUR_TUNNEL_URL/manifest.json`
+- **If tunnel won't connect**: Restart services in order - `stremula` first, then `stremula-tunnel`. The tunnel needs the server running on port 7003 before it can connect.
 
 ### Server won't start
 - Check that port 7003 is not in use
