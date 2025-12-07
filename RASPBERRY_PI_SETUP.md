@@ -496,45 +496,32 @@ npm run fetch24p
 
 ## Part 8: Installing in Stremio
 
-### Option A: Stremio Desktop App (Recommended - Easiest)
+**⚠️ Important:** Stremio requires HTTPS for network access. HTTP only works for localhost. For all network access (local network and public web), use Localtunnel.
 
-**For localhost access (if running Stremio on the Pi):**
+### Option A: Localhost Access (Same Device Only)
+
+If you're running Stremio on the same Raspberry Pi:
+
 1. Open Stremio on your Pi
 2. Go to **Addons** → **Community Addons**
 3. Click the **"+"** button
 4. Enter: `http://localhost:7003/manifest.json`
 5. Click **"Install"**
 
-**For network access (from another device on same WiFi):**
-1. **Find your Pi's IP address:**
-   ```bash
-   hostname -I
-   ```
-   Example output: `192.168.1.100`
+**Note:** This only works when Stremio and the server are on the same device.
 
-2. **Open Stremio Desktop** on your device (phone, computer, TV, etc.)
-3. **Go to Addons** → **Community Addons**
-4. **Click the "+" button**
-5. **Enter your addon URL:**
-   ```
-   http://192.168.1.100:7003/manifest.json
-   ```
-   (Replace `192.168.1.100` with your Pi's actual IP address)
+### Option B: Network Access via Localtunnel (Recommended)
 
-6. **Click "Install"**
-
-The addon should now appear in your Stremio library!
-
-### Option B: Stremio Web (via Localtunnel)
-
-Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access with no certificate warnings.
+**Use Localtunnel for all network access** - local network, public web, Stremio Desktop, and Stremio Web. Localtunnel provides HTTPS with valid certificates - no warnings, works everywhere.
 
 **🔒 Benefits:**
-- ✅ **No certificate warnings** - Valid SSL certificates provided by Localtunnel
-- ✅ **Works with Stremio web** - No browser security blocks
-- ✅ **Works on all devices** - iOS, Android, web browsers
-- ✅ **No port forwarding needed** - Works behind any router/NAT
+- ✅ **No certificate warnings** - Valid SSL certificates (Let's Encrypt)
+- ✅ **Works everywhere** - Stremio Desktop, Stremio Web, iOS, Android
+- ✅ **No port forwarding** - Works behind any router/NAT
+- ✅ **No firewall config** - No need to open ports
 - ✅ **Free and easy** - No signup required
+- ✅ **Works on local network** - Access from any device on your WiFi
+- ✅ **Works on public web** - Access from anywhere
 
 **Setup Steps:**
 
@@ -552,7 +539,7 @@ Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access with no 
    sudo systemctl start stremula
    ```
 
-3. **Start the tunnel** in a separate terminal (or as a systemd service):
+3. **Start the tunnel** in a separate terminal:
    ```bash
    lt --port 7003
    ```
@@ -562,7 +549,7 @@ Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access with no 
    your url is: https://random-name.loca.lt
    ```
 
-5. **Update config.json** (optional but recommended for media URLs):
+5. **Update config.json** (recommended for media URLs):
    ```bash
    # If in home directory:
    nano ~/stremula-1/config.json
@@ -579,16 +566,16 @@ Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access with no 
    ```
    Save and restart the server if needed.
 
-6. **Add to Stremio Web:**
-   - Go to [web.stremio.com](https://web.stremio.com)
+6. **Add to Stremio:**
+   - Open Stremio (Desktop or Web)
    - Go to **Addons** → **Community Addons**
    - Click the **"+"** button
    - Enter: `https://random-name.loca.lt/manifest.json`
    - Click **"Install"**
 
-**Running Localtunnel as a Systemd Service (Optional):**
+**Running Localtunnel as a Systemd Service (Recommended for Production):**
 
-For permanent access, you can run Localtunnel as a systemd service:
+For permanent access that starts automatically, run Localtunnel as a systemd service:
 
 ```bash
 sudo nano /etc/systemd/system/stremula-tunnel.service
@@ -636,22 +623,27 @@ sudo systemctl start stremula-tunnel
 # Start services
 sudo systemctl start stremula-server
 sudo systemctl start stremula-fetcher
+sudo systemctl start stremula-tunnel  # If using Localtunnel service
 
 # Stop services
 sudo systemctl stop stremula-server
 sudo systemctl stop stremula-fetcher
+sudo systemctl stop stremula-tunnel
 
 # Restart services
 sudo systemctl restart stremula-server
 sudo systemctl restart stremula-fetcher
+sudo systemctl restart stremula-tunnel
 
 # Check status
 sudo systemctl status stremula-server
 sudo systemctl status stremula-fetcher
+sudo systemctl status stremula-tunnel
 
 # View logs
 sudo journalctl -u stremula-server -f
 sudo journalctl -u stremula-fetcher -f
+sudo journalctl -u stremula-tunnel -f  # To see the tunnel URL
 ```
 
 **If using single service (Option A):**
@@ -766,20 +758,20 @@ curl http://YOUR_PI_IP:7003/health
 
 ### Can't access from Stremio
 
-1. **Check firewall:**
-   ```bash
-   # Allow port 7003
-   sudo ufw allow 7003/tcp
-   ```
-
-2. **Verify server is running:**
+1. **Verify server is running:**
    ```bash
    curl http://localhost:7003/manifest.json
    ```
 
+2. **Check Localtunnel is running:**
+   ```bash
+   sudo systemctl status stremula-tunnel
+   # Or if running manually, check the terminal output for the URL
+   ```
+
 3. **Check publicBaseUrl in config.json:**
-   - For local network: Leave empty or set to `http://YOUR_IP:7003`
-   - For Localtunnel: Set to your tunnel URL
+   - Should be set to your Localtunnel URL: `https://random-name.loca.lt`
+   - Get the URL from tunnel logs: `sudo journalctl -u stremula-tunnel -n 20`
 
 ### Localtunnel not working
 

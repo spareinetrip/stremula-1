@@ -145,35 +145,23 @@ For production deployments, use systemd. See [RASPBERRY_PI_SETUP.md](./RASPBERRY
 
 ## 📡 Installing in Stremio
 
-### Option 1: Stremio Desktop App (Recommended - Easiest)
+**⚠️ Important:** Stremio requires HTTPS for network access. HTTP only works for localhost. For all network access (local network and public web), use Localtunnel.
 
-**For localhost access:**
+### Option 1: Localhost Access (Same Device Only)
+
+If you're running Stremio on the same device as the server:
+
 ```
 http://localhost:7003/manifest.json
 ```
 
-**For network access (same WiFi):**
-1. Find your server's IP address:
-   ```bash
-   hostname -I  # On Linux/Raspberry Pi
-   ifconfig     # On macOS
-   ipconfig     # On Windows
-   ```
+**Note:** This only works when Stremio and the server are on the same device.
 
-2. Use the HTTP URL:
-   ```
-   http://YOUR_IP:7003/manifest.json
-   ```
+### Option 2: Network Access via Localtunnel (Recommended)
 
-3. Add in Stremio:
-   - Open Stremio Desktop
-   - Go to **Addons** → **Community Addons**
-   - Click the **"+"** button
-   - Paste the URL and click **"Install"**
+**Use Localtunnel for all network access** - local network, public web, Stremio Desktop, and Stremio Web. Localtunnel provides HTTPS with valid certificates - no warnings, works everywhere.
 
-### Option 2: Stremio Web (via Localtunnel)
-
-Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access:
+**Setup:**
 
 1. **Install Localtunnel:**
    ```bash
@@ -195,7 +183,7 @@ Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access:
    https://random-name.loca.lt
    ```
 
-5. **Update config.json** (optional but recommended):
+5. **Update config.json** (recommended for media URLs):
    ```json
    "server": {
      "port": 7003,
@@ -204,21 +192,27 @@ Stremio web requires HTTPS. Use Localtunnel for easy, free HTTPS access:
    ```
    Restart the server after updating.
 
-6. **Add to Stremio Web:**
-   - Go to [web.stremio.com](https://web.stremio.com)
+6. **Add to Stremio:**
+   - Open Stremio (Desktop or Web)
    - Go to **Addons** → **Community Addons**
    - Click the **"+"** button
    - Enter: `https://random-name.loca.lt/manifest.json`
    - Click **"Install"**
 
 **Benefits of Localtunnel:**
-- ✅ No certificate warnings (valid SSL certificate)
-- ✅ Works with Stremio web
-- ✅ Works on all devices (iOS, Android, web browsers)
-- ✅ No port forwarding needed
-- ✅ Free and easy to use
+- ✅ **No certificate warnings** - Valid SSL certificates (Let's Encrypt)
+- ✅ **Works everywhere** - Stremio Desktop, Stremio Web, iOS, Android
+- ✅ **No port forwarding** - Works behind any router/NAT
+- ✅ **No firewall config** - No need to open ports
+- ✅ **Free and easy** - No signup required
+- ✅ **Works on local network** - Access from any device on your WiFi
+- ✅ **Works on public web** - Access from anywhere
 
-**Note:** The tunnel URL changes each time you restart it. For permanent access, consider running the tunnel as a systemd service or using a paid tunneling service with static URLs.
+**Running Localtunnel as a Service:**
+
+For permanent access, run Localtunnel as a systemd service. See [RASPBERRY_PI_SETUP.md](./RASPBERRY_PI_SETUP.md) for complete setup instructions.
+
+**Note:** The tunnel URL changes each time you restart it. For a permanent URL, consider using a paid tunneling service with static URLs.
 
 ## 📥 Backfilling Historical Data
 

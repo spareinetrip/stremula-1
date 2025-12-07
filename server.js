@@ -612,9 +612,13 @@ async function startServer() {
             },
             installUrls: {
                 localhost: `http://localhost:${httpPort}/manifest.json`,
-                localNetwork: ips.map(ip => `http://${ip}:${httpPort}/manifest.json`)
+                note: 'Stremio requires HTTPS for network access. Use Localtunnel for all network access (local and public). See README.md for setup instructions.'
             },
-            note: 'For Stremio web access, use Localtunnel or another tunneling service. See README.md for setup instructions.'
+            localtunnel: {
+                install: 'npm install -g localtunnel',
+                run: `lt --port ${httpPort}`,
+                note: 'Localtunnel provides HTTPS with valid certificates - no warnings, works everywhere'
+            }
         });
     });
     
@@ -658,10 +662,10 @@ async function startServer() {
     });
 
     try {
-        // Listen on all interfaces (0.0.0.0) for local network access
-        httpServerInstance.listen(httpPort, '0.0.0.0', () => {
+        // Listen on localhost only - Localtunnel handles network access
+        httpServerInstance.listen(httpPort, '127.0.0.1', () => {
             const address = httpServerInstance.address();
-            console.log(`\n🌐 HTTP server running on port ${httpPort} (all interfaces)`);
+            console.log(`\n🌐 HTTP server running on port ${httpPort} (localhost only)`);
             console.log(`   Listening on: ${address.address}:${address.port}`);
             
             // Get local IP addresses for display
@@ -676,32 +680,19 @@ async function startServer() {
                 }
             }
             
-            console.log(`\n📡 Install in Stremio (localhost):`);
+            console.log(`\n📡 Install in Stremio (localhost only):`);
             console.log(`   http://localhost:${httpPort}/manifest.json`);
             console.log(`   http://127.0.0.1:${httpPort}/manifest.json`);
             
-            if (ips.length > 0) {
-                console.log(`\n📡 Install in Stremio Desktop (HTTP - local network):`);
-                ips.forEach(ip => {
-                    console.log(`   http://${ip}:${httpPort}/manifest.json`);
-                });
-                console.log(`\n📡 For Stremio Web (web.stremio.com):`);
-                console.log(`   Use Localtunnel: npm install -g localtunnel && lt --port ${httpPort}`);
-                console.log(`   See README.md for complete setup instructions`);
-                console.log(`\n🔍 Test server access:`);
-                ips.forEach(ip => {
-                    console.log(`   http://${ip}:${httpPort}/`);
-                });
-            } else {
-                console.log(`\n📡 Install in Stremio (local network):`);
-                console.log(`   http://YOUR_IP:${httpPort}/manifest.json`);
-                console.log(`   (Replace YOUR_IP with your device's IP address)`);
-            }
-            console.log(`\n✅ HTTP server running`);
-            console.log(`\n💡 Troubleshooting:`);
-            console.log(`   1. Make sure you include the port: http://IP:${httpPort}`);
-            console.log(`   2. Check firewall: sudo ufw allow ${httpPort}/tcp`);
-            console.log(`   3. Verify server: curl http://localhost:${httpPort}/health`);
+            console.log(`\n⚠️  IMPORTANT: Stremio requires HTTPS for network access`);
+            console.log(`   HTTP only works for localhost. For all network access, use Localtunnel:`);
+            console.log(`\n📡 Setup Localtunnel for network access:`);
+            console.log(`   1. Install: npm install -g localtunnel`);
+            console.log(`   2. Run: lt --port ${httpPort}`);
+            console.log(`   3. Use the HTTPS URL provided in Stremio`);
+            console.log(`\n   See README.md for complete setup instructions`);
+            console.log(`\n🔍 Test server access:`);
+            console.log(`   curl http://localhost:${httpPort}/health`);
         });
         
         // Verify server is actually listening
