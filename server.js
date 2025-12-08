@@ -533,6 +533,20 @@ function restartServer() {
     }, 1000);
 }
 
+// Helper function to log all available CLI commands
+function logAvailableCommands() {
+    console.log('\n📋 Available CLI Commands:');
+    console.log('   Fetch Commands:');
+    console.log('     --fetch1p, --fetch2p, --fetch3p, etc.  Fetch specific number of weekends');
+    console.log('     --force-weekend                        Override weekday check (fetch any day)');
+    console.log('   Reset Commands:');
+    console.log('     --reset-cache, --reset                 Reset processed posts cache');
+    console.log('     --reset-all                            Reset all data');
+    console.log('     --reset-gp="GP Name"                   Reset specific Grand Prix');
+    console.log('     --reset-gp="GP Name R21"               Reset specific Grand Prix round');
+    console.log('');
+}
+
 // Start server
 async function startServer() {
     // Reset restart flag
@@ -543,6 +557,9 @@ async function startServer() {
         setupGlobalErrorHandlers();
         errorHandlersSetup = true;
     }
+    
+    // Log available commands on startup
+    logAvailableCommands();
 
     const config = getConfig();
     
@@ -560,11 +577,6 @@ async function startServer() {
     // Check configuration
     if (!config.realdebrid.apiKey || !config.realdebrid.enabled) {
         console.log('⚠️  Real Debrid not configured');
-    }
-    
-    if (!config.reddit.clientId || !config.reddit.clientSecret || 
-        !config.reddit.username || !config.reddit.password) {
-        console.log('⚠️  Reddit API not configured');
     }
     
     const httpPort = config.server.port || 7003;

@@ -162,14 +162,11 @@ nano /opt/stremula-1/config.json
 
 **Fill in your credentials:**
 - Replace the empty `apiKey` value with your Real Debrid API key
-- Replace all empty Reddit credential values with your actual values:
-  - `clientId`: Your Reddit app client ID
-  - `clientSecret`: Your Reddit app client secret
-  - `username`: Your Reddit username
-  - `password`: Your Reddit password
-  - `userAgent`: Should match your Reddit username (e.g., `"Stremula1/3.0 (by u/yourusername)"`)
 - Set `realdebrid.enabled` to `true`
+- Optionally set `reddit.userAgent` to a custom user agent string (default: "Stremula1/3.0")
 - **Leave `publicBaseUrl` empty** - it will be automatically updated by the tunnel service
+
+**Note:** Reddit authentication is no longer required. The addon uses Reddit's public JSON API which doesn't require any credentials.
 
 **To save in nano:**
 - Press `Ctrl + X`

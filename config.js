@@ -10,18 +10,14 @@ const DEFAULT_CONFIG = {
         enabled: false
     },
     reddit: {
-        clientId: '',
-        clientSecret: '',
-        username: '',
-        password: '',
-        userAgent: 'Stremula1/3.0 (by u/yourusername)'
+        userAgent: 'Stremula1/3.0'
     },
     server: {
         port: 7003,
         publicBaseUrl: ''
     },
     fetcher: {
-        intervalMinutes: 15,
+        intervalMinutes: 30,
         maxScrollMonths: 3
     }
 };
@@ -70,19 +66,6 @@ function getConfig() {
     if (process.env.REALDEBRID_API_KEY) {
         config.realdebrid.apiKey = process.env.REALDEBRID_API_KEY;
         config.realdebrid.enabled = true;
-    }
-    
-    if (process.env.REDDIT_CLIENT_ID) {
-        config.reddit.clientId = process.env.REDDIT_CLIENT_ID;
-    }
-    if (process.env.REDDIT_CLIENT_SECRET) {
-        config.reddit.clientSecret = process.env.REDDIT_CLIENT_SECRET;
-    }
-    if (process.env.REDDIT_USERNAME) {
-        config.reddit.username = process.env.REDDIT_USERNAME;
-    }
-    if (process.env.REDDIT_PASSWORD) {
-        config.reddit.password = process.env.REDDIT_PASSWORD;
     }
     
     if (process.env.PORT) {

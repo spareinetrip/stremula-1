@@ -29,7 +29,24 @@ if (resetGpArg) {
     }
 }
 
+// Helper function to log all available CLI commands
+function logAvailableCommands() {
+    console.log('\n📋 Available CLI Commands:');
+    console.log('   Fetch Commands:');
+    console.log('     --fetch1p, --fetch2p, --fetch3p, etc.  Fetch specific number of weekends');
+    console.log('     --force-weekend                        Override weekday check (fetch any day)');
+    console.log('   Reset Commands:');
+    console.log('     --reset-cache, --reset                 Reset processed posts cache');
+    console.log('     --reset-all                            Reset all data');
+    console.log('     --reset-gp="GP Name"                   Reset specific Grand Prix');
+    console.log('     --reset-gp="GP Name R21"               Reset specific Grand Prix round');
+    console.log('');
+}
+
 async function main() {
+    // Log available commands
+    logAvailableCommands();
+    
     const config = getConfig();
     
     // Initialize database
@@ -107,13 +124,6 @@ async function main() {
     if (!config.realdebrid.apiKey || !config.realdebrid.enabled) {
         console.error('❌ Real Debrid not configured');
         console.error('   Please configure Real Debrid API key in config.json');
-        process.exit(1);
-    }
-    
-    if (!config.reddit.clientId || !config.reddit.clientSecret || 
-        !config.reddit.username || !config.reddit.password) {
-        console.error('❌ Reddit API not configured');
-        console.error('   Please configure Reddit API credentials in config.json');
         process.exit(1);
     }
     

@@ -5,7 +5,7 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 ## 🚀 Features
 
 - **Real Debrid Integration**: Direct streaming links with instant playback
-- **Reddit API Access**: Reliable, authenticated access to Formula 1 posts from u/egortech
+- **Reddit Integration**: Public JSON API access to Formula 1 posts from u/egortech (no authentication required)
 - **Persistent Database**: SQLite database stores all weekends and streaming links
 - **Smart Fetching**: Automatic background service checks for new content every 15 minutes
 - **Quality Selection**: 4K and 1080p options when available
@@ -19,30 +19,11 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 - Sign up at [real-debrid.com](https://real-debrid.com)
 - Get your API token from [API Token page](https://real-debrid.com/apitoken)
 
-### 2. Reddit API Credentials (REQUIRED)
-The addon uses Reddit's official API to avoid blocking issues.
-
-#### How to Get Reddit API Credentials:
-
-1. **Create a Reddit App:**
-   - Go to [Reddit App Preferences](https://www.reddit.com/prefs/apps)
-   - Click "Create App" or "Create Another App"
-   - Choose **"script"** as the app type
-   - Enter any name (e.g., "Stremula1")
-   - Leave redirect URI empty
-   - Click "Create app"
-
-2. **Get Your Credentials:**
-   - **Client ID**: The string under your app name (looks like: `abcd1234efgh5678`)
-   - **Client Secret**: The "secret" field (longer string)
-   - **Username**: Your Reddit username (without u/ prefix)
-   - **Password**: Your Reddit password
-
-### 3. Node.js (REQUIRED)
+### 2. Node.js (REQUIRED)
 - Node.js version 16 or higher
 - npm (comes with Node.js)
 
-### 4. Raspberry Pi (Recommended)
+### 3. Raspberry Pi (Recommended)
 - Optimized for Raspberry Pi with systemd service setup
 - Can run on any Linux system with Node.js
 
@@ -70,11 +51,7 @@ Edit `/opt/stremula-1/config.json`:
     "enabled": true
   },
   "reddit": {
-    "clientId": "YOUR_REDDIT_CLIENT_ID",
-    "clientSecret": "YOUR_REDDIT_CLIENT_SECRET",
-    "username": "YOUR_REDDIT_USERNAME",
-    "password": "YOUR_REDDIT_PASSWORD",
-    "userAgent": "Stremula1/3.0 (by u/YOUR_REDDIT_USERNAME)"
+    "userAgent": "Stremula1/3.0"
   },
   "server": {
     "port": 7003,
@@ -159,10 +136,7 @@ npm run fetch24p
 
 - **realdebrid.apiKey**: Your Real Debrid API key (required)
 - **realdebrid.enabled**: Set to `true` to enable Real Debrid (required)
-- **reddit.clientId**: Reddit app client ID (required)
-- **reddit.clientSecret**: Reddit app client secret (required)
-- **reddit.username**: Your Reddit username (required)
-- **reddit.password**: Your Reddit password (required)
+- **reddit.userAgent**: User agent string for Reddit API requests (optional, default: "Stremula1/3.0")
 - **server.port**: Port for the Stremio server (default: 7003)
 - **server.publicBaseUrl**: Automatically updated by tunnel service - leave empty
 - **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
@@ -214,14 +188,10 @@ Systemd provides additional protection for system-level failures.
 - Check that `realdebrid.apiKey` is set in `config.json`
 - Verify the API key is correct at [real-debrid.com/apitoken](https://real-debrid.com/apitoken)
 
-### "Reddit API not configured"
-- Check that all Reddit credentials are set in `config.json`
-- Verify your Reddit app is set to "script" type
-
 ### "No posts found"
-- Check Reddit API credentials are working
 - Verify u/egortech is still posting Formula 1 content
-- Check server logs for authentication errors
+- Check server logs for API errors
+- Verify network connectivity to Reddit
 
 ### Can't access from Stremio
 - **Get your tunnel URL**: `sudo journalctl -u stremula-tunnel -n 50 | grep "https://"`
@@ -292,7 +262,6 @@ sudo systemctl restart stremula-tunnel
 
 - **Never commit `config.json`** with real credentials to version control
 - Real Debrid API keys should be kept secure
-- Reddit passwords should be kept secure
 - The database file contains processed post data but not sensitive credentials
 
 ## 📝 License

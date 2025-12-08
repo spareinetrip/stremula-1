@@ -31,58 +31,7 @@ const GRAND_PRIX_2025 = [
     { name: 'Abu Dhabi Grand Prix', round: 24, country: 'United Arab Emirates', aliases: ['Abu Dhabi GP', 'UAE Grand Prix', 'UAE GP', 'Yas Marina Grand Prix', 'Yas Marina GP'] }
 ];
 
-// Reddit OAuth token cache
-let redditAuth = { token: null, expiresAt: 0 };
-
-// Get Reddit OAuth token
-async function getRedditOAuthToken() {
-    const config = getConfig();
-    
-    if (!config.reddit.clientId || !config.reddit.clientSecret || 
-        !config.reddit.username || !config.reddit.password) {
-        console.log('⚠️  Reddit OAuth credentials not configured');
-        return null;
-    }
-    
-    // Check if token is still valid (with 5 minute buffer)
-    if (redditAuth.token && Date.now() < (redditAuth.expiresAt - 5 * 60 * 1000)) {
-        return redditAuth.token;
-    }
-    
-    console.log('🔐 Authenticating with Reddit API...');
-    
-    try {
-        const authHeader = Buffer.from(`${config.reddit.clientId}:${config.reddit.clientSecret}`).toString('base64');
-        const body = new URLSearchParams();
-        body.append('grant_type', 'password');
-        body.append('username', config.reddit.username);
-        body.append('password', config.reddit.password);
-        
-        const response = await axios.post('https://www.reddit.com/api/v1/access_token', body.toString(), {
-            headers: {
-                'Authorization': `Basic ${authHeader}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': config.reddit.userAgent
-            },
-            timeout: 30000
-        });
-        
-        const accessToken = response.data?.access_token;
-        const expiresIn = response.data?.expires_in || 3600;
-        
-        if (accessToken) {
-            redditAuth.token = accessToken;
-            redditAuth.expiresAt = Date.now() + (expiresIn * 1000);
-            console.log('✅ Reddit OAuth authentication successful');
-            return accessToken;
-        }
-        
-        return null;
-    } catch (error) {
-        console.error('❌ Reddit OAuth authentication failed:', error.response?.status, error.response?.statusText);
-        return null;
-    }
-}
+// Reddit public JSON API - no authentication required
 
 // Extract year from title (e.g., "Formula 1 2026" or "2026 Formula 1")
 function extractYearFromTitle(title) {
@@ -653,17 +602,11 @@ async function convertMagnetToRealDebridStreamingLinks(magnetLink, apiKey, postI
     }
 }
 
-// Fetch egortech posts from Reddit (matches old plugin method exactly)
+// Fetch egortech posts from Reddit using public JSON API
 async function fetchEgortechPosts(maxPosts = null) {
     const config = getConfig();
-    const oauthToken = await getRedditOAuthToken();
     
-    if (!oauthToken) {
-        console.error('❌ Cannot fetch posts without Reddit OAuth token');
-        return [];
-    }
-    
-    console.log('🔍 Fetching egortech posts using Reddit API...');
+    console.log('🔍 Fetching egortech posts using Reddit public JSON API...');
     
     const allPosts = [];
     const foundRaces = new Set(); // Track unique races found
@@ -674,22 +617,21 @@ async function fetchEgortechPosts(maxPosts = null) {
     const maxScrollTime = Date.now() - (config.fetcher.maxScrollMonths * 30 * 24 * 60 * 60 * 1000);
     const MAX_CONSECUTIVE_EMPTY_PAGES = 2;
     
-    console.log('📡 Using Reddit OAuth API for reliable access...');
+    console.log('📡 Using Reddit public JSON API (no authentication required)...');
     
     while (pageCount < maxPages && (!maxPosts || allPosts.length < maxPosts)) {
         pageCount++;
         console.log(`📄 Fetching page ${pageCount}...`);
         
-        // Use OAuth Reddit API endpoint (exactly like old plugin)
-        let url = `https://oauth.reddit.com/user/egortech/submitted?limit=100&raw_json=1`;
+        // Use public Reddit JSON API endpoint
+        let url = `https://www.reddit.com/user/egortech/submitted.json?limit=100`;
         if (after) {
             url += `&after=${after}`;
         }
         
         const axiosConfig = {
             headers: {
-                'Authorization': `bearer ${oauthToken}`,
-                'User-Agent': config.reddit.userAgent
+                'User-Agent': config.reddit.userAgent || 'Stremula1/3.0'
             },
             timeout: 30000 // 30 second timeout
         };
@@ -770,21 +712,15 @@ async function fetchEgortechPosts(maxPosts = null) {
                 break;
             }
             
-            // Rate limiting - Reddit API allows 60 requests per minute
+            // Rate limiting - be respectful to Reddit's public API
             await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second between requests
             
         } catch (pageError) {
             console.error(`❌ Error fetching page ${pageCount}:`, pageError.response?.status, pageError.response?.statusText);
-            if (pageError.response?.status === 401) {
-                console.log('🔐 Token expired, refreshing...');
-                redditAuth.token = null; // Force token refresh
-                const newToken = await getRedditOAuthToken();
-                if (!newToken) {
-                    console.error('❌ Failed to refresh token, stopping');
-                    break;
-                }
-                // Retry the same page with new token
-                pageCount--;
+            if (pageError.response?.status === 429) {
+                console.log('⏳ Rate limited, waiting longer before retry...');
+                await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds for rate limit
+                pageCount--; // Retry the same page
                 continue;
             }
             // For other errors, wait longer and continue
@@ -792,7 +728,7 @@ async function fetchEgortechPosts(maxPosts = null) {
         }
     }
     
-    console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech using Reddit API`);
+    console.log(`✅ Found ${allPosts.length} Formula 1 posts from egortech using Reddit public JSON API`);
     
     // Log post details for debugging - show Grand Prix names
     if (allPosts.length > 0) {
@@ -960,12 +896,6 @@ async function fetchAndProcess(maxWeekends = null) {
     
     if (!config.realdebrid.apiKey || !config.realdebrid.enabled) {
         console.error('❌ Real Debrid not configured');
-        return;
-    }
-    
-    if (!config.reddit.clientId || !config.reddit.clientSecret || 
-        !config.reddit.username || !config.reddit.password) {
-        console.error('❌ Reddit API not configured');
         return;
     }
     
