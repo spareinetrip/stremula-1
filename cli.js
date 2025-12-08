@@ -32,14 +32,21 @@ if (resetGpArg) {
 // Helper function to log all available CLI commands
 function logAvailableCommands() {
     console.log('\n📋 Available CLI Commands:');
-    console.log('   Fetch Commands:');
-    console.log('     --fetch1p, --fetch2p, --fetch3p, etc.  Fetch specific number of weekends');
-    console.log('     --force-weekend                        Override weekday check (fetch any day)');
+    console.log('   Start Commands:');
+    console.log('     npm start                              Start server + fetcher (normal mode)');
+    console.log('     npm run start:force                    Start server + fetcher (force weekend mode)');
+    console.log('     npm run fetcher:force                  Start only fetcher with --force-weekend');
+    console.log('   Fetch Commands (manual):');
+    console.log('     npm run fetch                          Manual fetch (until fully processed)');
+    console.log('     npm run fetch1p                        Fetch 1 weekend');
+    console.log('     npm run fetch2p                        Fetch 2 weekends');
+    console.log('     npm run fetch3p                        Fetch 3 weekends');
+    console.log('     node cli.js --fetch1p                  Direct CLI usage');
     console.log('   Reset Commands:');
-    console.log('     --reset-cache, --reset                 Reset processed posts cache');
-    console.log('     --reset-all                            Reset all data');
-    console.log('     --reset-gp="GP Name"                   Reset specific Grand Prix');
-    console.log('     --reset-gp="GP Name R21"               Reset specific Grand Prix round');
+    console.log('     npm run reset-cache                    Reset processed posts cache');
+    console.log('     npm run reset-all                      Reset all data');
+    console.log('     node cli.js --reset-gp="GP Name"       Reset specific Grand Prix');
+    console.log('     node cli.js --reset-gp="GP Name R21"   Reset specific Grand Prix round');
     console.log('');
 }
 

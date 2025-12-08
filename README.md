@@ -7,7 +7,8 @@ High-quality Sky Sports F1 replays with Real Debrid integration, optimized for R
 - **Real Debrid Integration**: Direct streaming links with instant playback
 - **Reddit Integration**: Public JSON API access to Formula 1 posts from u/egortech (no authentication required)
 - **Persistent Database**: SQLite database stores all weekends and streaming links
-- **Smart Fetching**: Automatic background service checks for new content every 15 minutes
+- **Smart Fetching**: Automatic background service checks for new content every 30 minutes
+- **Race Weekend Optimization**: Only fetches on Friday, Saturday, and Sunday (F1 race weekends) to stay within Reddit API limits
 - **Quality Selection**: 4K and 1080p options when available
 - **Session Detection**: Automatically detects Practice, Qualifying, Sprint, and Race sessions
 - **Auto-Restart**: Built-in crash recovery with automatic restart functionality
@@ -58,7 +59,7 @@ Edit `/opt/stremula-1/config.json`:
     "publicBaseUrl": ""
   },
   "fetcher": {
-    "intervalMinutes": 15,
+    "intervalMinutes": 30,
     "maxScrollMonths": 3
   }
 }
@@ -121,14 +122,43 @@ node cli.js --fetchXp
 
 # Examples:
 node cli.js --fetch1p    # Fetch 1 weekend
-node cli.js --fetch5p     # Fetch 5 weekends
-node cli.js --fetch24p    # Fetch 24 weekends (full season)
+node cli.js --fetch5p    # Fetch 5 weekends
+node cli.js --fetch24p   # Fetch 24 weekends (full season)
 
 # Convenience npm scripts:
 npm run fetch1p
 npm run fetch5p
 npm run fetch24p
 ```
+
+## 🚦 Fetcher Service Modes
+
+### Normal Mode (Default)
+The fetcher service runs continuously but **only fetches on Friday, Saturday, and Sunday** (F1 race weekends). This helps stay within Reddit API rate limits.
+
+```bash
+# Start both server and fetcher (normal mode)
+npm start
+
+# Or start fetcher only
+npm run fetcher
+```
+
+### Force Weekend Mode
+Override the weekday check to fetch on any day. Useful for testing or if you need to fetch content outside of race weekends.
+
+```bash
+# Start both server and fetcher with --force-weekend flag
+npm run start:force
+
+# Or start fetcher only with --force-weekend flag
+npm run fetcher:force
+
+# Or use direct node command
+node fetcher-service.js --force-weekend
+```
+
+**Note:** The `--force-weekend` flag only applies to the fetcher service, not manual fetch commands.
 
 ## 🔧 Configuration Options
 
@@ -139,7 +169,7 @@ npm run fetch24p
 - **reddit.userAgent**: User agent string for Reddit API requests (optional, default: "Stremula1/3.0")
 - **server.port**: Port for the Stremio server (default: 7003)
 - **server.publicBaseUrl**: Automatically updated by tunnel service - leave empty
-- **fetcher.intervalMinutes**: How often to check for new posts (default: 15)
+- **fetcher.intervalMinutes**: How often to check for new posts (default: 30, only on Fri/Sat/Sun)
 - **fetcher.maxScrollMonths**: How far back to search for posts (default: 3)
 
 ## 🗄️ Database
@@ -159,7 +189,10 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 
 ## 🔄 How It Works
 
-1. **Fetcher Service** runs continuously, checking for new posts every 15 minutes
+1. **Fetcher Service** runs continuously, checking for new posts every 30 minutes
+   - **Smart Scheduling**: Only fetches on Friday, Saturday, and Sunday (F1 race weekends)
+   - This reduces Reddit API calls and helps stay within rate limits
+   - Use `--force-weekend` flag to override and fetch on any day
 2. Each fetch:
    - Fetches newest posts from u/egortech on Reddit
    - For each new F1 weekend post found:
@@ -171,6 +204,7 @@ The plugin uses SQLite for storage. The database file is created at `stremula.db
 3. **Server** serves content from the database in real-time
 4. **Tunnel Service** provides HTTPS access via Localtunnel with a unique subdomain
 5. Posts are only marked as "fully processed" when ALL required sessions are found and converted
+6. **Command Logging**: All available CLI commands are displayed when starting services
 
 ## 🔄 Auto-Restart Functionality
 
@@ -257,6 +291,39 @@ npm install
 sudo systemctl restart stremula
 sudo systemctl restart stremula-tunnel
 ```
+
+## 🛠️ CLI Commands Reference
+
+### Start Commands
+```bash
+npm start                    # Start server + fetcher (normal mode, Fri/Sat/Sun only)
+npm run start:force          # Start server + fetcher (force weekend mode, any day)
+npm run server               # Start only server
+npm run fetcher              # Start only fetcher (normal mode)
+npm run fetcher:force        # Start only fetcher (force weekend mode)
+```
+
+### Manual Fetch Commands
+```bash
+npm run fetch                # Manual fetch (until fully processed weekend found)
+npm run fetch1p              # Fetch 1 weekend
+npm run fetch2p              # Fetch 2 weekends
+npm run fetch3p              # Fetch 3 weekends
+npm run fetch5p              # Fetch 5 weekends
+npm run fetch10p             # Fetch 10 weekends
+npm run fetch20p             # Fetch 20 weekends
+npm run fetch24p             # Fetch 24 weekends (full season)
+```
+
+### Reset Commands
+```bash
+npm run reset-cache          # Reset processed posts cache (allows re-processing)
+npm run reset-all            # Reset all data (weekends, sessions, links, posts)
+node cli.js --reset-gp="Qatar Grand Prix"        # Reset specific Grand Prix
+node cli.js --reset-gp="Qatar Grand Prix R23"     # Reset specific Grand Prix round
+```
+
+**Note:** For `--reset-gp`, you must use `node cli.js` directly because npm scripts don't handle quoted arguments well.
 
 ## 🔐 Security Notes
 
