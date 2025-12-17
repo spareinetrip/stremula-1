@@ -4,7 +4,7 @@
 
 set -e
 
-WORKING_DIR="/opt/stremula"
+WORKING_DIR="/opt/stremula-1"
 CONFIG_FILE="${WORKING_DIR}/config.json"
 PORT=7004
 

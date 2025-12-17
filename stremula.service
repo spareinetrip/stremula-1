@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=julien
-WorkingDirectory=/opt/stremula
-ExecStart=/opt/stremula/start-stremula.sh
+WorkingDirectory=/opt/stremula-1
+ExecStart=/opt/stremula-1/start-stremula.sh
 Restart=always
 RestartSec=10
 StartLimitInterval=300
