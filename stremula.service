@@ -1,0 +1,29 @@
+[Unit]
+Description=Stremula 1 (Server + Fetcher + Tunnel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=julien
+WorkingDirectory=/opt/stremula
+ExecStart=/opt/stremula/start-stremula.sh
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Environment=NODE_ENV=production
+Environment=PATH=/usr/bin:/usr/local/bin
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stremula
+
+[Install]
+WantedBy=multi-user.target
+
