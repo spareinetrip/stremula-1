@@ -373,6 +373,48 @@ async function checkTunnelHealth(tunnelUrl) {
 
 // Start periodic health check for tunnel connection
 let globalHealthCheckInterval = null;
+let globalKeepaliveInterval = null;
+let consecutiveKeepaliveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 2;
+
+// Start keepalive ping mechanism to prevent tunnel from closing due to inactivity
+function startKeepalive(tunnelUrl) {
+    // Clear any existing keepalive interval
+    if (globalKeepaliveInterval) {
+        clearInterval(globalKeepaliveInterval);
+        globalKeepaliveInterval = null;
+    }
+    
+    // Reset consecutive failures counter
+    consecutiveKeepaliveFailures = 0;
+    
+    // Keepalive ping every 30 seconds
+    const KEEPALIVE_INTERVAL = 30 * 1000; // 30 seconds
+    
+    console.log(`💚 Starting tunnel keepalive ping (every ${KEEPALIVE_INTERVAL / 1000} seconds)...`);
+    
+    globalKeepaliveInterval = setInterval(async () => {
+        try {
+            const isHealthy = await checkTunnelHealth(tunnelUrl);
+            if (!isHealthy) {
+                consecutiveKeepaliveFailures++;
+                if (consecutiveKeepaliveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    console.log(`⚠️  Keepalive failed ${consecutiveKeepaliveFailures} times - tunnel may be down`);
+                }
+            } else {
+                // Reset on success
+                if (consecutiveKeepaliveFailures > 0) {
+                    consecutiveKeepaliveFailures = 0;
+                }
+            }
+        } catch (error) {
+            consecutiveKeepaliveFailures++;
+            if (consecutiveKeepaliveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                console.log(`⚠️  Keepalive error - tunnel may be down: ${error.message}`);
+            }
+        }
+    }, KEEPALIVE_INTERVAL);
+}
 
 function startHealthCheck(tunnelUrl, deviceId, port, maxRetries, ltProcess) {
     // Clear any existing health check interval
@@ -381,8 +423,8 @@ function startHealthCheck(tunnelUrl, deviceId, port, maxRetries, ltProcess) {
         globalHealthCheckInterval = null;
     }
     
-    // Check every 10 minutes (600000ms) - localtunnel typically times out after 30+ minutes of inactivity
-    const HEALTH_CHECK_INTERVAL = 10 * 60 * 1000; // 10 minutes
+    // Check every 2 minutes (120000ms) - reduced from 10 minutes for faster detection
+    const HEALTH_CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes
     
     console.log(`💓 Starting tunnel health check (checking every ${HEALTH_CHECK_INTERVAL / 60000} minutes)...`);
     
@@ -405,8 +447,9 @@ function startHealthCheck(tunnelUrl, deviceId, port, maxRetries, ltProcess) {
         // Check if tunnel URL is still accessible
         const tunnelHealthy = await checkTunnelHealth(tunnelUrl);
         
-        if (!processAlive || !tunnelHealthy) {
-            console.log(`⚠️  Tunnel health check failed! Process alive: ${processAlive}, URL accessible: ${tunnelHealthy}`);
+        // Restart if process is dead, tunnel is unhealthy, OR consecutive keepalive failures reached threshold
+        if (!processAlive || !tunnelHealthy || consecutiveKeepaliveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            console.log(`⚠️  Tunnel health check failed! Process alive: ${processAlive}, URL accessible: ${tunnelHealthy}, Keepalive failures: ${consecutiveKeepaliveFailures}`);
             console.log(`🔄 Restarting tunnel proactively...`);
             
             // Clear health check interval
@@ -414,6 +457,15 @@ function startHealthCheck(tunnelUrl, deviceId, port, maxRetries, ltProcess) {
                 clearInterval(globalHealthCheckInterval);
                 globalHealthCheckInterval = null;
             }
+            
+            // Clear keepalive interval
+            if (globalKeepaliveInterval) {
+                clearInterval(globalKeepaliveInterval);
+                globalKeepaliveInterval = null;
+            }
+            
+            // Reset consecutive failures counter
+            consecutiveKeepaliveFailures = 0;
             
             // Kill the dead/unresponsive tunnel process if it's still running
             if (ltProcess && !ltProcess.killed && ltProcess.pid) {
@@ -451,8 +503,8 @@ function startHealthCheck(tunnelUrl, deviceId, port, maxRetries, ltProcess) {
             // Restart tunnel
             startTunnelInternal(deviceId, port, 0, maxRetries);
         } else {
-            // Tunnel is healthy, log periodically (every 6th check = 1 hour)
-            if (checkCount % 6 === 0) {
+            // Tunnel is healthy, log periodically (every 15th check = 30 minutes)
+            if (checkCount % 15 === 0) {
                 console.log(`✅ Tunnel health check passed - tunnel is active and accessible`);
             }
         }
@@ -592,6 +644,9 @@ function startTunnelInternal(deviceId, port, retryCount, maxRetries) {
                         urlUpdated = true;
                         urlVerified = true;
                         
+                        // Start keepalive ping to prevent tunnel from closing due to inactivity
+                        startKeepalive(tunnelUrl);
+                        
                         // Start periodic health check to detect inactivity/disconnections
                         startHealthCheck(tunnelUrl, deviceId, port, maxRetries, lt);
                         
@@ -625,6 +680,15 @@ function startTunnelInternal(deviceId, port, retryCount, maxRetries) {
             clearInterval(globalHealthCheckInterval);
             globalHealthCheckInterval = null;
         }
+        
+        // Clear keepalive interval when tunnel closes
+        if (globalKeepaliveInterval) {
+            clearInterval(globalKeepaliveInterval);
+            globalKeepaliveInterval = null;
+        }
+        
+        // Reset consecutive failures counter
+        consecutiveKeepaliveFailures = 0;
         
         // Don't retry if we're shutting down gracefully
         if (isShuttingDown) {
@@ -734,6 +798,15 @@ function startTunnelInternal(deviceId, port, retryCount, maxRetries) {
             clearInterval(globalHealthCheckInterval);
             globalHealthCheckInterval = null;
         }
+        
+        // Clear keepalive interval
+        if (globalKeepaliveInterval) {
+            clearInterval(globalKeepaliveInterval);
+            globalKeepaliveInterval = null;
+        }
+        
+        // Reset consecutive failures counter
+        consecutiveKeepaliveFailures = 0;
         
         // Set up close handler BEFORE killing (in case process exits quickly)
         let shutdownComplete = false;
